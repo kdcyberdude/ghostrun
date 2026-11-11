@@ -5,7 +5,7 @@ description: Run the whole GhostRun pipeline for one game, from ROM to tested Th
 
 # GhostRun pipeline
 
-Stages run in order and each needs evidence to pass: `intake → reward → verify → explore → oracle → assets → build → compare → gate → visual3d`. Call `ghostrun_status` at the start of every session and continue from `next`. Never rely on memory of earlier sessions.
+Stages need evidence to pass in order: `intake → reward → verify → explore → oracle → assets → build → compare → gate → visual3d`. Independent work may run concurrently: mark active stages running without claiming they passed. Call `ghostrun_status` at the start of every session and continue from `next`. Never rely on memory of earlier sessions.
 
 ## Before starting
 Use the game path and reconstruction target supplied by the user. Initialize with default `recreate` mode. This preserves the observed levels, rules and progression; do not invent a new maze or silently narrow the requested game to its first level. Use `mechanics` only for an explicitly requested remix. Read docs/RECREATION.md for evidence formats and completion checks. Begin terminal recording at launch and preserve it across continuations.

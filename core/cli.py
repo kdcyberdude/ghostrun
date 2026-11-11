@@ -50,6 +50,8 @@ def socket_path(a):
 
 
 def cmd_init(a):
+    if ledger(a).path.exists():
+        raise LedgerError('game already initialized; use ghostrun_status to resume or choose a new slug')
     if not isolation.paths_are_separate(a.reference_root, a.builder_root):
         raise LedgerError('reference and builder folders must not overlap')
     rights = json.loads(a.rights) if a.rights else None
@@ -88,6 +90,8 @@ def cmd_set(a):
         contract = json.loads(Path(a.evidence).read_text())
         completion.validate_contract(contract)
         state = ledger(a).read()
+        if state['stages']['reward']['status'] != 'passed':
+            raise LedgerError('verify cannot pass before reward verification passes')
         if state.get('contract') and state['contract'] != contract:
             old = state['contract']
             if not set(old['levels']) <= set(contract['levels']) or not set(old['cases']) <= set(contract['cases']) or any(

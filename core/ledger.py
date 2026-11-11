@@ -58,7 +58,7 @@ class Ledger:
         state = self.read()
         if stage not in state['stages']:
             raise LedgerError(f'{stage} is not part of this game workflow')
-        if status in ('running', 'passed', 'skipped'):
+        if status in ('passed', 'skipped'):
             for earlier in list(state['stages'])[:list(state['stages']).index(stage)]:
                 if state['stages'][earlier]['status'] != 'passed':
                     raise LedgerError(f'{stage} cannot be {status}: {earlier} has not passed')

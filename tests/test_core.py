@@ -246,3 +246,13 @@ def test_replacing_asset_kit_removes_stale_files_and_preserves_previous_kit(tmp_
     assert not (build / 'g/assets/old.png').exists()
     assert (build / 'g/assets/new.png').exists()
     assert list((build / 'g').glob('assets-backup-*/old.png'))
+
+
+def test_parallel_work_can_run_without_premature_acceptance(tmp_path):
+    led = Ledger(tmp_path / 'state.json')
+    led.create('g', 'recreate')
+    led.set('explore', 'running', 'provisional training')
+    led.set('assets', 'running', 'prepare observed kit')
+    assert led.next_stage() == 'intake'
+    with pytest.raises(LedgerError):
+        led.set('explore', 'passed', 'still missing earlier verification')

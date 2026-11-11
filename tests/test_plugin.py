@@ -143,3 +143,13 @@ def test_cli_uses_configured_game_runtime(tmp_path):
     argv = plugin.base_argv()
     assert argv[0] == '/configured/game/python'
     assert argv[argv.index('--python') + 1] == '/configured/game/python'
+
+
+def test_reinitialization_does_not_replace_the_reference_rom(ctx, tmp_path):
+    rom = tmp_path / 'original.nes'
+    rom.write_bytes(b'original')
+    handler = ctx.tools['ghostrun_init'][1]
+    assert 'error' not in json.loads(handler({'slug': 'g', 'rom': str(rom)}))
+    rom.write_bytes(b'different cartridge')
+    assert 'already initialized' in json.loads(handler({'slug': 'g', 'rom': str(rom)}))['error']
+    assert (Path(ctx.settings['reference_root']) / 'g/game.nes').read_bytes() == b'original'
