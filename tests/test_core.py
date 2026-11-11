@@ -39,7 +39,9 @@ def test_oracle_steps_and_never_leaks(tmp_path):
     r = o.handle({'op': 'step', 'buttons': ['RIGHT'], 'frames': 5})
     assert r['observables'] == {'x': 5} and r['frame'] == 5
     assert 'image_png_base64' not in r and not {'ram', 'rom', 'state'} & set(r)
-    assert json.loads((tmp_path / 'trace.jsonl').read_text().splitlines()[0])['x'] == 5
+    rows = [json.loads(line) for line in (tmp_path / 'trace.jsonl').read_text().splitlines()]
+    assert [row['f'] for row in rows] == list(range(6))
+    assert rows[0]['x'] == 0 and rows[-1]['x'] == 5
 
 
 @pytest.mark.parametrize('req', [{'op': 'ram'}, {'op': 'step', 'poke': 1}, {'op': 'step', 'frames': 0},
@@ -148,3 +150,99 @@ def test_status_of_unknown_game_explains(tmp_path):
     Ledger(tmp_path / 'known' / 'state.json').create('known', 'mechanics')
     out = cli.cmd_status(argparse.Namespace(reference_root=str(tmp_path), slug='missing'))
     assert 'ghostrun_init' in out['error'] and out['games'] == ['known']
+
+
+def test_oracle_batched_per_frame_matches_single_steps(tmp_path):
+    batch = Oracle(Fake(), tmp_path / 'batch')
+    single = Oracle(Fake(), tmp_path / 'single')
+    reply = batch.handle({'op': 'step', 'buttons': ['RIGHT'], 'frames': 5, 'per_frame': True})
+    expected = [single.handle({'op': 'step', 'buttons': ['RIGHT'], 'frames': 1})['observables']['x'] for _ in range(5)]
+    assert [r['x'] for r in reply['trace']] == expected
+    assert [r['f'] for r in reply['trace']] == [1, 2, 3, 4, 5]
+    assert reply['frame'] == 5
+
+
+def test_prepared_assets_reject_changed_unlisted_and_escaping_files(tmp_path):
+    from compare import sha256
+    from prepared_assets import validate_assets
+    kit = tmp_path / 'kit'
+    kit.mkdir()
+    asset = kit / 'sprite.png'
+    asset.write_bytes(b'observed frame fixture')
+    manifest = {'files': [{'path': 'sprite.png', 'source': 'observed frame 0',
+                           'method': 'observed-frame', 'sha256': sha256(asset)}]}
+    (kit / 'manifest.json').write_text(json.dumps(manifest))
+    assert validate_assets(kit) == manifest
+    asset.write_bytes(b'changed')
+    with pytest.raises(ValueError, match='hash mismatch'):
+        validate_assets(kit)
+    manifest['files'][0]['sha256'] = sha256(asset)
+    (kit / 'manifest.json').write_text(json.dumps(manifest))
+    (kit / 'extra.png').write_bytes(b'unlisted')
+    with pytest.raises(ValueError, match='every file'):
+        validate_assets(kit)
+    manifest['files'][0]['path'] = '../outside.png'
+    (tmp_path / 'outside.png').write_bytes(b'external')
+    (kit / 'manifest.json').write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match='inside the kit'):
+        validate_assets(kit)
+
+
+def test_policy_reset_replays_first_action_each_time():
+    from oracle import PolicyPlayer
+    player = PolicyPlayer.__new__(PolicyPlayer)
+    calls = []
+    def reply(**request):
+        calls.append(request['op'])
+        return {'ok': True, 'buttons': ['RIGHT'], 'frames': 1, 'tick': 0, 'mask': 128}
+    player._call = reply
+    for _ in range(2):
+        player.reset(b'frame')
+        assert player.next(b'frame') == (['RIGHT'], 1)
+        player.next(b'frame')
+    assert calls == ['reset', 'advance', 'reset', 'advance']
+
+
+def test_asset_kit_rejects_unlisted_directory_symlink_and_rom(tmp_path):
+    from prepared_assets import validate_assets
+    from compare import sha256
+    kit = tmp_path / 'kit'
+    kit.mkdir()
+    (kit / 'sprite.png').write_bytes(b'image')
+    item = {'path': 'sprite.png', 'source': 'frame0', 'method': 'observed-frame', 'sha256': sha256(kit / 'sprite.png')}
+    (kit / 'manifest.json').write_text(json.dumps({'files': [item]}))
+    private = tmp_path / 'private'
+    private.mkdir()
+    (private / 'game.nes').write_bytes(b'private ROM')
+    (kit / 'unlisted').symlink_to(private, target_is_directory=True)
+    with pytest.raises(ValueError, match='symlink'):
+        validate_assets(kit)
+    (kit / 'unlisted').unlink()
+    (kit / 'game.nes').write_bytes(b'ROM')
+    with pytest.raises(ValueError, match='reference file'):
+        validate_assets(kit)
+
+
+def test_replacing_asset_kit_removes_stale_files_and_preserves_previous_kit(tmp_path):
+    import argparse
+    import cli
+    from compare import sha256
+    ref, build, source = tmp_path / 'ref', tmp_path / 'build', tmp_path / 'source'
+    (ref / 'g').mkdir(parents=True)
+    (build / 'g').mkdir(parents=True)
+    source.mkdir()
+    Ledger(ref / 'g/state.json').create('g', 'recreate')
+    def kit(name):
+        for p in source.iterdir():
+            p.unlink()
+        p = source / name
+        p.write_bytes(b'asset')
+        (source / 'manifest.json').write_text(json.dumps({'files': [dict(path=name, source='frame0', method='observed-frame', sha256=sha256(p))]}))
+    args = argparse.Namespace(reference_root=str(ref), builder_root=str(build), slug='g', source=str(source))
+    kit('old.png')
+    cli.cmd_import_assets(args)
+    kit('new.png')
+    cli.cmd_import_assets(args)
+    assert not (build / 'g/assets/old.png').exists()
+    assert (build / 'g/assets/new.png').exists()
+    assert list((build / 'g').glob('assets-backup-*/old.png'))

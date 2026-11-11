@@ -1,5 +1,5 @@
 name: ghostrun
-version: 0.1.0
+version: 0.2.0
 manifest_version: 2
 description: Teach an agent a retro game by playing it, then rebuild the game in Three.js against a black-box oracle.
 kind: standalone
@@ -8,6 +8,7 @@ tags: [games, reinforcement-learning, threejs, cuda]
 requires_hermes: ">=0.23.0"
 python_runtime: external
 provides_tools:
+  - ghostrun_recreation_check
   - ghostrun_init
   - ghostrun_reward_check
   - ghostrun_reward_audit

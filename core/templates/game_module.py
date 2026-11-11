@@ -29,7 +29,10 @@ def boot(n):
 
 
 def observables(r):
-    """Optional. Numbers the builder may see in traces (positions, speeds). Must not include map or code data."""
+    """Verified numeric gameplay observations: player/enemy positions and modes, score, lives,
+    level, terminal and mechanic-specific counters. Required for recreation coverage.
+    Discover through controlled play and RAM/screen correlation; no map/code dumps or ROM tables.
+    """
     return {}
 
 

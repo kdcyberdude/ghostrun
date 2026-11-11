@@ -66,6 +66,8 @@ Training needs an NVIDIA GPU with CUDA and a Python with [`requirements-runtime.
 
 ## Use it
 
+New runs default to independent recreation of the observed levels and mechanics, followed by 3D and recordings. See [the recreation workflow and completion evidence](docs/RECREATION.md). A measured full-route completion check is separate from the regression gate.
+
 Give Hermes a game ROM and ask:
 
 > Use the ghostrun pipeline on `/path/to/game.nes`.
@@ -80,7 +82,7 @@ uv run --no-project --with-requirements requirements-dev.txt python -m pytest te
 
 The CPU unit suite runs without Hermes or a GPU. See [Contributing](CONTRIBUTING.md) for setup.
 
-The end-to-end check runs all 28 tools through a real Hermes install. Its docstring has the instructions: [`tests/integration/hermes_itest.py`](tests/integration/hermes_itest.py).
+The end-to-end check runs all declared tools through a real Hermes install. Its docstring has the instructions: [`tests/integration/hermes_itest.py`](tests/integration/hermes_itest.py).
 
 ## Status
 

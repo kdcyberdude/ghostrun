@@ -20,6 +20,8 @@ def run(reference, rebuild, tolerances, baseline_path):
     report = {'result': result, 'reasons': []}
     if not result['frames_compared']:
         report['reasons'].append('no frames compared')
+    if result['missing_fields'] or result['invalid_values']:
+        report['reasons'].append('required fields are missing or non-finite')
     path = Path(baseline_path)
     if not path.exists():
         report['reasons'].append('no baseline saved yet')

@@ -19,3 +19,5 @@ Graphics are a separate layer that reads the simulation. They never change it.
 - Image-to-3D models give fused meshes with baked poses. They suit rigid props and references, not animated characters.
 
 **Prove it:** build and launch both versions independently, and verify that the 2D version still works with the 3D assets and build output absent. Run the same inputs headless, in 2D and in 3D, and require identical simulation hashes and audio events. Then measure frame time at the target resolution.
+
+For the default recreate workflow, create both complete-playthrough videos and the delivery manifest from docs/RECREATION.md. Pass the `visual3d` stage only after target launch checks, per-frame simulation/audio parity and visual inspection; missing requested assets or videos means incomplete.

@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 import tempfile
 
-STAGES = ('intake', 'reward', 'verify', 'explore', 'oracle', 'build', 'compare', 'gate')
+STAGES = ('intake', 'reward', 'verify', 'explore', 'oracle', 'assets', 'build', 'compare', 'gate', 'visual3d')
 STATUSES = ('pending', 'running', 'passed', 'failed', 'blocked')
-MODES = ('mechanics', 'faithful')
+MODES = ('recreate', 'mechanics', 'faithful')
 RIGHTS_BASES = ('owner', 'open-license')
 
 
@@ -17,10 +17,10 @@ class LedgerError(ValueError):
 
 
 def check_rights(mode, rights):
-    """'mechanics' builds new art and levels. 'faithful' reuses the game's own material, so it needs a stated basis."""
+    """Independent recreation needs no asset import; faithful asset reuse needs a stated basis."""
     if mode not in MODES:
         raise LedgerError(f'mode must be one of {MODES}')
-    if mode == 'mechanics':
+    if mode in ('recreate', 'mechanics'):
         return
     if not rights or rights.get('basis') not in RIGHTS_BASES or not rights.get('source'):
         raise LedgerError("faithful mode needs rights: {'basis': 'owner'|'open-license', 'source': <licence or proof>}")
@@ -37,7 +37,8 @@ class Ledger:
         if self.path.exists():
             raise LedgerError(f'{self.path} already exists')
         self._write({'game': game, 'mode': mode, 'rights': rights, 'notes': [],
-                     'stages': {s: {'status': 'pending', 'evidence': None} for s in STAGES}})
+                     'stages': {s: {'status': 'pending', 'evidence': None}
+                                for s in (STAGES if mode == 'recreate' else tuple(s for s in STAGES if s not in ('assets', 'visual3d')))}})
 
     def read(self):
         return json.loads(self.path.read_text())
@@ -53,8 +54,10 @@ class Ledger:
         if stage not in STAGES or status not in STATUSES:
             raise LedgerError(f'unknown stage or status: {stage}, {status}')
         state = self.read()
+        if stage not in state['stages']:
+            raise LedgerError(f'{stage} is not part of this game workflow')
         if status in ('running', 'passed'):
-            for earlier in STAGES[:STAGES.index(stage)]:
+            for earlier in list(state['stages'])[:list(state['stages']).index(stage)]:
                 if state['stages'][earlier]['status'] != 'passed':
                     raise LedgerError(f'{stage} cannot be {status}: {earlier} has not passed')
         if status == 'passed' and not evidence:
@@ -67,4 +70,4 @@ class Ledger:
 
     def next_stage(self):
         state = self.read()
-        return next((s for s in STAGES if state['stages'][s]['status'] != 'passed'), None)
+        return next((s for s, result in state['stages'].items() if result['status'] != 'passed'), None)

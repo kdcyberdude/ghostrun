@@ -7,6 +7,8 @@ description: Build an independent Three.js game by observing a black-box oracle,
 
 You are the builder. Your first call must be `ghostrun_builder_enter`. You see only your workspace and `ghostrun_oracle_call`: actions in, frames and declared numbers out. Never look for the ROM, the reference folder or an emulator, and never put an emulator or a replay behind the canvas. The game must be a real, independent simulation.
 
+Default recreate mode must preserve observed level topology and placement, with reconstructed matching visuals and animation timing. Tiny visually negligible differences are acceptable; a new identity, new maze or visibly different sprites are not the default target. Do not replace the level with an original maze. Read docs/RECREATION.md and use `ghostrun_recreation_check`; if measurements are missing, return precise measurement requests to the parent reference agent. Use oracle `step` with `per_frame:true` for efficient full traces.
+
 Read the project configuration with `ghostrun_status` and follow the requested reconstruction target. Prepared assets arrive in `assets/`; retain any accompanying notices.
 
 ## Spine first, before gameplay

@@ -120,3 +120,18 @@ def test_wake_message_only_on_new_action(ctx, tmp_path):
     plugin.run_cli = lambda *a, **k: json.dumps(next(reports))
     plugin.watch_loop('g', 1, Stop())
     assert len(ctx.injected) == 1 and 'training-doctor' in ctx.injected[0][0]
+
+
+def test_reference_context_cannot_become_builder(ctx):
+    ctx.tools['ghostrun_reference_enter'][1]({}, task_id='reference')
+    reply = json.loads(ctx.tools['ghostrun_builder_enter'][1]({'slug': 'g'}, task_id='reference'))
+    assert 'fresh builder session' in reply['error']
+
+
+def test_recreate_builder_waits_for_assets(ctx, tmp_path):
+    rom = tmp_path / 'g.nes'
+    rom.write_bytes(b'NES\x1a' + bytes(64))
+    init = json.loads(ctx.tools['ghostrun_init'][1]({'slug': 'g', 'rom': str(rom)}))
+    assert init['mode'] == 'recreate'
+    reply = json.loads(ctx.tools['ghostrun_builder_enter'][1]({'slug': 'g'}, task_id='builder'))
+    assert 'prepare assets' in reply['error']

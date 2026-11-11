@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 
 CORE = Path(__file__).resolve().parent
 REWARD10 = CORE.parent / 'engine' / 'scripts' / 'reward10'
@@ -22,6 +23,8 @@ sys.path[:0] = [str(CORE), str(REWARD10)]
 
 import compare as compare_mod  # noqa: E402
 import gate as gate_mod  # noqa: E402
+import completion  # noqa: E402
+from prepared_assets import validate_assets  # noqa: E402
 import isolation  # noqa: E402
 from ledger import Ledger, LedgerError, check_rights  # noqa: E402
 import train_ctl  # noqa: E402
@@ -80,6 +83,39 @@ def cmd_status(a):
 
 
 def cmd_set(a):
+    if a.status == 'passed' and a.stage == 'verify' and ledger(a).read()['mode'] == 'recreate':
+        contract = json.loads(Path(a.evidence).read_text())
+        completion.validate_contract(contract)
+        state = ledger(a).read()
+        if state.get('contract') and state['contract'] != contract:
+            old = state['contract']
+            if not set(old['levels']) <= set(contract['levels']) or not set(old['cases']) <= set(contract['cases']) or any(
+                    k not in contract['fields'].get(group, {}) or contract['fields'][group][k] > limit
+                    for group, fields in old['fields'].items() for k, limit in fields.items()):
+                raise LedgerError('reference contract is pinned; do not shrink scope or loosen tolerances')
+            state.setdefault('contract_history', []).append({'contract': old, 'stages': state['stages']})
+            state['stages'] = {s: (dict(status='pending', evidence=None) if s in ('explore', 'oracle', 'assets', 'build', 'compare', 'gate', 'visual3d') else result)
+                               for s, result in state['stages'].items()}
+        state['contract'] = contract
+        ledger(a)._write(state)
+    if a.status == 'passed' and a.stage == 'explore' and ledger(a).read()['mode'] == 'recreate':
+        report = completion.training(a.evidence, ledger(a).read()['contract'])
+        if not report['complete']:
+            raise LedgerError('policy training incomplete: ' + '; '.join(report['problems']))
+    if a.status == 'passed' and a.stage == 'assets':
+        validate_assets(builder_dir(a) / 'assets')
+    if a.status == 'passed' and ledger(a).read()['mode'] == 'recreate' and a.stage in ('gate', 'visual3d'):
+        contract = ledger(a).read().get('contract')
+        if not contract:
+            raise LedgerError('verify must pin the full-game reference contract first')
+        report = completion.delivery(a.evidence, contract) if a.stage == 'visual3d' else completion.check(a.evidence, contract)
+        recreation = Path(a.evidence)
+        if a.stage == 'visual3d':
+            recreation = recreation.parent / json.loads(recreation.read_text())['recreation']
+        report['problems'].extend(completion.verify_reference(recreation, contract, ref_dir(a) / 'evidence' / 'oracle'))
+        report['complete'] = not report['problems']
+        if not report['complete']:
+            raise LedgerError('recreation incomplete: ' + '; '.join(report['problems']))
     state = ledger(a).set(a.stage, a.status, a.evidence, a.note)
     return {'stage': a.stage, **state['stages'][a.stage]}
 
@@ -143,15 +179,37 @@ def cmd_isolation(a):
 
 
 def cmd_import_assets(a):
-    """Faithful mode only: copy an already prepared, rights-cleared asset folder. Nothing is extracted from a ROM."""
+    """Copy prepared assets with provenance. Nothing is extracted from a ROM."""
     state = ledger(a).read()
-    if state['mode'] != 'faithful':
+    if state['mode'] == 'mechanics':
         raise LedgerError('mechanics mode uses original art; assets can only be imported in faithful mode')
     src = Path(a.source).expanduser().resolve(strict=True)
     if not (src / 'manifest.json').exists():
         raise LedgerError('the asset folder needs a manifest.json listing each file and its licence')
+    if state['mode'] == 'recreate':
+        validate_assets(src)
     dest = builder_dir(a) / 'assets'
-    shutil.copytree(src, dest, dirs_exist_ok=True)
+    if state['mode'] == 'recreate':
+        problems = isolation.scan(src, ref_dir(a))
+        if problems:
+            raise LedgerError('asset kit is not isolated: ' + '; '.join(problems))
+        if dest.is_symlink():
+            raise LedgerError('asset destination must not be a symlink')
+        with tempfile.TemporaryDirectory(dir=builder_dir(a), prefix='.asset-import-') as stage:
+            kit = Path(stage) / 'assets'
+            shutil.copytree(src, kit)
+            validate_assets(kit)
+            backup = dest.with_name('assets-backup-' + uuid.uuid4().hex)
+            if dest.exists():
+                dest.rename(backup)
+            try:
+                kit.rename(dest)
+            except OSError:
+                if backup.exists():
+                    backup.rename(dest)
+                raise
+    else:
+        shutil.copytree(src, dest, dirs_exist_ok=True)
     return {'imported': str(dest), 'files': sum(1 for p in dest.rglob('*') if p.is_file())}
 
 
@@ -219,6 +277,17 @@ def cmd_compare(a):
     return compare_mod.compare(a.reference, a.rebuild, read_tolerances(a))
 
 
+def cmd_completion(a):
+    state = ledger(a).read()
+    if state.get('mode') == 'recreate' and not state.get('contract'):
+        raise LedgerError('verify must pin the full-game reference contract first')
+    report = completion.check(a.manifest, state.get('contract'))
+    if state.get('mode') == 'recreate':
+        report['problems'].extend(completion.verify_reference(a.manifest, state['contract'], ref_dir(a) / 'evidence' / 'oracle'))
+        report['complete'] = not report['problems']
+    return report
+
+
 def baseline_path(a):
     return ref_dir(a) / 'evidence' / 'gate-baseline.json'
 
@@ -243,8 +312,9 @@ def parser():
         for flag, kw in args:
             p.add_argument(flag, **kw)
 
-    add('init', cmd_init, ('--rom', dict(required=True)), ('--mode', dict(default='mechanics')), ('--rights', {}))
+    add('init', cmd_init, ('--rom', dict(required=True)), ('--mode', dict(default='recreate')), ('--rights', {}))
     add('status', cmd_status)
+    add('completion', cmd_completion, ('--manifest', dict(required=True)))
     add('set', cmd_set, ('stage', {}), ('status', {}), ('--evidence', {}), ('--note', {}))
     add('reward-check', cmd_reward_check)
     add('audit', cmd_audit, ('--episodes', dict(type=int, default=12)), ('--steps', dict(type=int, default=3000)))
@@ -273,7 +343,7 @@ def main():
     a = parser().parse_args()
     try:
         result = a.fn(a)
-    except (LedgerError, train_ctl.TrainError, FileNotFoundError) as e:
+    except (ValueError, train_ctl.TrainError, OSError, KeyError, TypeError) as e:
         print(json.dumps({'error': str(e)}))
         sys.exit(1)
     if result is not None:

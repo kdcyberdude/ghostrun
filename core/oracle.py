@@ -20,7 +20,7 @@ import sys
 MAX_LINE = 1 << 19
 BUTTONS = ('UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT')
 FIELDS = {
-    'hello': set(), 'reset': set(), 'step': {'buttons', 'frames', 'image'}, 'observe': {'image'},
+    'hello': set(), 'reset': set(), 'step': {'buttons', 'frames', 'image', 'per_frame'}, 'observe': {'image'},
     'checkpoint': {'name'}, 'restore': {'name'}, 'play': {'ticks', 'image'},
 }
 MAX_FRAMES = 240
@@ -104,6 +104,7 @@ class PolicyPlayer:
         return names, reply['frames']
 
     def reset(self, screen_png):
+        self._started = False
         self._take(self._call(op='reset', image_png_base64=base64.b64encode(screen_png).decode()))
 
     def next(self, screen_png):
@@ -138,9 +139,10 @@ class Oracle:
         return out
 
     def _advance(self, buttons, frames):
-        self.backend.step(buttons, frames)
-        self.frame += frames
-        self._record(buttons, frames)
+        for _ in range(frames):
+            self.backend.step(buttons, 1)
+            self.frame += 1
+            self._record(buttons, 1)
 
     def handle(self, req):
         op = req.get('op')
@@ -157,6 +159,7 @@ class Oracle:
         if op == 'reset':
             self.backend.reset()
             self.frame = 0
+            self._record([], 0)
             if self.player:
                 self.player.reset(png_bytes(self.backend.screen()))
             return self._reply(True)
@@ -168,6 +171,12 @@ class Oracle:
                 raise OracleError(f'unknown buttons {sorted(set(buttons) - set(BUTTONS))}')
             if not (isinstance(frames, int) and 1 <= frames <= MAX_FRAMES):
                 raise OracleError(f'frames must be 1..{MAX_FRAMES}')
+            if req.get('per_frame'):
+                rows = []
+                for _ in range(frames):
+                    self._advance(buttons, 1)
+                    rows.append({'f': self.frame, 'buttons': list(buttons), **self.backend.observables()})
+                return self._reply(bool(req.get('image')), applied=buttons, trace=rows)
             self._advance(buttons, frames)
             return self._reply(bool(req.get('image')), applied=buttons)
         if op == 'checkpoint':

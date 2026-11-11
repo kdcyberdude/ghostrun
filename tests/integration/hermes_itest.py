@@ -21,13 +21,13 @@ def tool(name,args,task):
     try: return json.loads(out)
     except Exception: return {'raw':out}
 names=[n for n in registry.get_all_tool_names() if n.startswith('ghostrun_')]
-check('real registry has 28 tools',len(names)==28,names)
+check('real registry has 29 tools',len(names)==29,names)
 R='ref1'; B='bld1'; ref=T/'ref'; 
 r=tool('ghostrun_status',{'slug':'none'},'x'); check('status of unknown game returns error',('error' in r),r)
 rom=T/'t.nes'; subprocess.run([sys.executable,P/'tests/fixtures/make_test_rom.py',rom],check=True)
 r=tool('ghostrun_init',{'slug':'tg','rom':str(rom)},'unassigned'); check('hook blocks reference tool for unassigned task','reference sessions' in json.dumps(r),r)
 r=tool('ghostrun_reference_enter',{},R); check('reference_enter received task id',r.get('role')=='reference',r)
-r=tool('ghostrun_init',{'slug':'tg','rom':str(rom)},R); check('init',r.get('next')=='reward',r)
+r=tool('ghostrun_init',{'slug':'tg','rom':str(rom),'mode':'mechanics'},R); check('init',r.get('next')=='reward',r)
 r=tool('ghostrun_init',{'slug':'fa','rom':str(rom),'mode':'faithful'},R); check('faithful refused without rights','rights' in json.dumps(r),r)
 digest=hashlib.sha256(rom.read_bytes()).hexdigest()
 mod=ref/'tg/games/tg.py'; mod.write_text((P/'tests/fixtures/testgame.py').read_text().replace("'0' * 64",repr(digest)))
@@ -41,6 +41,7 @@ r=tool('ghostrun_stage_set',{'slug':'tg','stage':'reward','status':'passed','evi
 out=get_plugin_command_handler('ghostrun')('tg'); check('/ghostrun command','reward' in out and 'passed' in out,out)
 for s in ('pipeline','reward-discovery','gpu-env-port','training-doctor','rebuild-from-oracle','visual-upgrade'):
     r=tool('skill_view',{'name':f'ghostrun:{s}'},R); check(f'skill {s}',r.get('success') and len(r.get('content',''))>300,r)
+r=tool('ghostrun_recreation_check',{'slug':'tg','manifest':str(T/'missing.json')},R); check('completion rejects missing evidence','error' in r,r)
 # oracle and builder
 r=tool('ghostrun_oracle_start',{'slug':'tg'},'unassigned'); check('hook blocks oracle_start for unassigned','reference sessions' in json.dumps(r),r)
 r=tool('ghostrun_oracle_start',{'slug':'tg'},R); check('oracle_start',r.get('started'),r)
@@ -81,7 +82,11 @@ r=tool('ghostrun_engine_setup',{'slug':'tg','boot_frames':10},R); check('engine_
 eng=ref/'tg/engine'; cuh=eng/'rl/csrc/reward10.cuh'; s=cuh.read_text()
 s=s.replace('RL10_HD Signals observe(int game,','RL10_HD Signals observe_tg(const std::uint8_t* r) {\n    Signals s = blank();\n    s.in_play = true;\n    s.level = 0;\n    s.progress = static_cast<double>(u8(r, 0x10));\n    s.progress_valid = true;\n    return s;\n}\n\nRL10_HD Signals observe(int game,',1).replace('        default: return observe_punchout(r, e);','        case kGame_tg: return observe_tg(r);\n        default: return observe_punchout(r, e);',1); cuh.write_text(s)
 r=tool('ghostrun_engine_parity',{'slug':'tg'},R); check('engine_parity on real port',r.get('parity'),r)
-r=tool('ghostrun_train_start',{'slug':'tg'},R); busy=bool(subprocess.run(['nvidia-smi','--query-compute-apps=pid','--format=csv,noheader'],capture_output=True,text=True).stdout.strip()); check('train refuses busy GPU','GPU is in use' in json.dumps(r) if busy else True,r)
+busy=bool(subprocess.run(['nvidia-smi','--query-compute-apps=pid','--format=csv,noheader'],capture_output=True,text=True).stdout.strip())
+if busy:
+    r=tool('ghostrun_train_start',{'slug':'tg'},R); check('train refuses busy GPU','GPU is in use' in json.dumps(r),r)
+else:
+    print('SKIP live busy-GPU refusal: no competing GPU job (unit test covers refusal)',flush=True)
 CPU='--device cpu --envs-per-game 1 --steps 8 --minibatch-envs 4 --epochs 1 --eval-every-minutes 0 --total-iters 3'
 r=tool('ghostrun_train_start',{'slug':'tg','args':CPU},R); check('train_start real CPU run',r.get('pid'),r); run=Path(r.get('run','/x'))
 for _ in range(400):

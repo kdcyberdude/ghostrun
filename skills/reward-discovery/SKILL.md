@@ -8,7 +8,7 @@ description: Work out a NES game's RAM and write a verified reward reader. Use f
 Goal: a module at `games/<slug>.py` that turns RAM into `Signals`. The shared reward in `reward.py` never changes per game. Read the files listed in `read_first` from `ghostrun_init` before writing anything.
 
 ## Loop
-1. Look for existing address notes, such as a stable-retro `data.json` with a matching ROM hash or a public disassembly. Treat them as unverified candidates.
+1. Look for existing address notes, such as a stable-retro `data.json` with a matching ROM hash or prior black-box measurement notes. Treat them as unverified candidates.
 2. Script `boot()`: poll RAM until the first controllable frame. Confirm with a screenshot.
 3. Record RAM on every frame during random play, then diff around events: which byte changes on the frame of a death, a pickup or a level change?
 4. Confirm each meaning with `poke` and the screen, for example set a counter to 37 and read 37 on the HUD.
@@ -31,3 +31,5 @@ Goal: a module at `games/<slug>.py` that turns RAM into `Signals`. The shared re
 6. `ghostrun_reward_search` reaches the end of the first level and the level event fires on screen.
 
 Record each signal as verified, provisional or unverified, and be honest in `INFO['win_status']`. Search reach is proof the reward points forward. It is not evidence of what a policy will learn.
+
+Before passing verify for recreation, implement and screen-check `observables()` for player position, every enemy position/mode, score, lives, level, ending and relevant timers/counters. Record unknowns and continue controlled probes; a reward reader alone is insufficient for frame-by-frame recreation. Preserve full requested-game scope; do not redefine first-level completion as a whole-game win.

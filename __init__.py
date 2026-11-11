@@ -38,9 +38,10 @@ def number(description, **extra):
 REFERENCE_TOOLS = {
     'ghostrun_init': ('init', 'Start a game: copy the ROM into the private reference folder and create its stage ledger. '
                       'Before the first call, load skill_view("ghostrun:pipeline") and follow it. '
-                      'mode is mechanics (new art and levels) or faithful (needs rights).',
+                      'Default recreate preserves observed levels and mechanics using independent code and authored assets. '
+                      'mechanics is an explicitly requested remix; faithful imports prepared assets and needs rights.',
                       dict(slug=SLUG, rom=text('Path to a ROM you have the right to use.'),
-                           mode=text('mechanics or faithful.', default='mechanics'),
+                           mode=text('recreate (default), mechanics (remix), or faithful (licensed asset import).', default='recreate'),
                            rights=text("JSON such as {'basis':'open-license','license':'GPL-3.0','source':'<url>'}.", default=None)),
                       {'rom': '--rom', 'mode': '--mode', 'rights': '--rights'}),
     'ghostrun_reward_check': ('reward-check', 'Check every reward module against the contract.', dict(slug=SLUG), {}),
@@ -67,10 +68,15 @@ REFERENCE_TOOLS = {
     'ghostrun_fix_validate': ('fix-validate', 'Run contract, audit, lint, balance and CUDA parity on the edited reward.', dict(slug=SLUG), {}),
     'ghostrun_fix_apply': ('fix-apply', 'Stop training and start a new run on the validated reward from the best measured weights.', dict(slug=SLUG), {}),
     'ghostrun_fix_review': ('fix-review', 'Judge an applied fix using test plays only.', dict(slug=SLUG), {}),
-    'ghostrun_assets_import': ('import-assets', 'Faithful mode only: copy a prepared, licensed asset folder into the builder.',
+    'ghostrun_assets_import': ('import-assets', 'Copy prepared observed/reconstructed assets with provenance into a recreate builder, '
+                             'or prepared licensed assets in faithful mode. Never extract ROM maps, tables or code.',
                                dict(slug=SLUG, source=text('Folder with a manifest.json.')), {'source': '--source'}),
 }
 SHARED_TOOLS = {
+    'ghostrun_recreation_check': ('completion', 'Check complete-route recreation evidence. A regression PASS is insufficient. '
+                                 'Read docs/RECREATION.md for the manifest. Returns remaining gaps.',
+                                 dict(slug=SLUG, manifest=text('Path to recreation completion manifest JSON.')),
+                                 {'manifest': '--manifest'}),
     'ghostrun_status': ('status', 'Show the stage ledger for a game and the next stage. Call first in every session. '
                         'The pipeline is in skill_view("ghostrun:pipeline").', dict(slug=SLUG), {}),
     'ghostrun_stage_set': ('set', 'Record a stage result. A pass needs evidence and every earlier stage passed.',
@@ -160,9 +166,19 @@ class Plugin:
         return json.dumps({'role': 'reference'})
 
     def builder_enter(self, args, task_id='', **_):
+        if task_id in self.reference_tasks:
+            return json.dumps({'error': 'start a fresh builder session: changing folders cannot erase reference context'})
+        root = Path(self.builder_root()) / args['slug']
+        info = root / '.oracle.json'
+        if info.exists() and json.loads(info.read_text()).get('mode') == 'recreate':
+            sys.path.insert(0, str(HERE / 'core'))
+            from prepared_assets import validate_assets
+            try:
+                validate_assets(root / 'assets')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                return json.dumps({'error': f'prepare assets before building: {e}'})
         self.reference_tasks.discard(task_id)
         self.builder_tasks.add(task_id)
-        root = Path(self.builder_root()) / args['slug']
         return json.dumps({'role': 'builder', 'workspace': str(root), 'oracle': 'use ghostrun_oracle_call'})
 
     def socket_of(self, slug):
@@ -247,6 +263,8 @@ class Plugin:
         """Default deny: a session reaches the reference only after declaring itself a reference session."""
         if task_id in self.reference_tasks:
             return None
+        if tool_name == 'ghostrun_stage_set' and args.get('stage') in ('intake', 'reward', 'verify', 'explore', 'oracle', 'assets'):
+            return {'action': 'block', 'message': 'Reference stages and their measurement contract require a reference session.'}
         if tool_name in REFERENCE_TOOLS or tool_name in ('ghostrun_oracle_start', 'ghostrun_oracle_stop'):
             return {'action': 'block', 'message': f'{tool_name} is for reference sessions only.'}
         body = json.dumps(args or {}, default=str).lower()
