@@ -51,7 +51,9 @@ Create procedural mesh assets and an independently launchable 3D build alongside
   "build2d": "dist2d/index.html",
   "build3d": "dist3d/index.html",
   "video2d": "videos/2d.mp4",
-  "video3d": "videos/3d.mp4"
+  "video3d": "videos/3d.mp4",
+  "video_original": "videos/original.mp4",
+  "session_recording": "session.cast"
 }
 ```
 
@@ -84,3 +86,21 @@ Pass explore in recreate mode with an evaluation JSON path as evidence. It conta
 Reference/repeat traces must retain raw oracle coordinates, numeric values and applied buttons. The completion tool and recreate stage transitions authenticate them against private oracle recordings; local fixtures or fabricated matching JSON cannot stand in for native play. Reset and every applied frame are recorded by the oracle. Collect new runs with this version before using the completion checker; older chunk-only logs cannot authenticate full routes.
 
 A reference contract may be expanded with more levels, route cases or fields, or tighter tolerances. Its prior scope and limits cannot be removed or loosened. Expanding it preserves the prior contract/stage snapshot and resets downstream stages to pending, requiring new training coverage and comparisons.
+
+Delivery also requires a complete original-game video (`video_original`) and the Hermes terminal recording (`session_recording`, asciinema v2). Record the original game through the reference process, including actual gameplay/audio; do not label a remake video as original. The default reference backend uses stable-retro's NES core; a video from it is not a recording of the separate FCEUX desktop application. If FCEUX itself is explicitly requested, capture that application separately. The terminal recording must contain actual output, not only an empty recording header.
+
+## Visible 2D output
+
+The completion manifest must also name `visual_route`, selecting a completed clear/heldout reference path, and `visuals`, at least three distinct frame pairs including reset and ending:
+
+```json
+{"visual_route":"clear.ref.jsonl","visuals":[
+ {"f":0,"reference":"screens/native-0.png","rebuild":"screens/threejs-0.png"},
+ {"f":100,"reference":"screens/native-100.png","rebuild":"screens/threejs-100.png"},
+ {"f":200,"reference":"screens/native-200.png","rebuild":"screens/threejs-200.png"}
+]}
+```
+
+Use actual route frame numbers. Native screenshots are authenticated against private oracle captures and numeric observations. Rebuild captures must come from the actual browser rendering driven by the same inputs, at native resolution without shifting, cropping or resizing to manufacture agreement. Fixed image bounds allow tiny color/edge variance but reject visibly different or blank output. These sampled checks supplement full per-frame numeric comparisons; the parent still inspects representative gameplay, animation and capture provenance.
+
+For an explicit 2D-only request, omit 3D artifact/parity/video keys from delivery and mark `visual3d` `skipped` with that delivery manifest as evidence. The plugin still checks completed 2D recreation, 2D/hash/audio parity, original/2D videos and terminal recording. Never skip 3D when it was requested. Other stages cannot be skipped.

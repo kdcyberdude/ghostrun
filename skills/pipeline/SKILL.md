@@ -27,3 +27,5 @@ Use the game path and reconstruction target supplied by the user. Initialize wit
 - Report plainly what is done, what is left and why. A passed gate means no regression, not that the rebuild is finished.
 
 For independent divergences, use at most two builders with separate worktrees and explicit file ownership. Each returns its first divergence, native evidence, minimal rule, regression test and branch. Integrate one change at a time and rerun the entire recorded route suite after each merge; reject regressions. Never parallelize two fixes to the same timing dependency.
+
+While GPU training runs, prepare matching assets and collect reference measurements in parallel where independent, without passing stages out of order. For an explicit 2D-only target, finish verified 2D delivery and mark visual3d skipped with the 2D delivery manifest; do no 3D work.

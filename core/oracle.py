@@ -135,6 +135,11 @@ class Oracle:
         out = {'ok': True, 'frame': self.frame, 'frame_sha256': hashlib.sha256(data).hexdigest(),
                'observables': self.backend.observables(), **extra}
         if image:
+            folder = self.dir / 'frames'
+            folder.mkdir(exist_ok=True)
+            snapshot = folder / f'{self.frame}-{out["frame_sha256"]}.png'
+            snapshot.write_bytes(data)
+            snapshot.with_suffix('.json').write_text(json.dumps({'f': self.frame, 'observables': out['observables']}))
             out['image_png_base64'] = base64.b64encode(data).decode()
         return out
 

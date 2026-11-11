@@ -80,7 +80,7 @@ SHARED_TOOLS = {
     'ghostrun_status': ('status', 'Show the stage ledger for a game and the next stage. Call first in every session. '
                         'The pipeline is in skill_view("ghostrun:pipeline").', dict(slug=SLUG), {}),
     'ghostrun_stage_set': ('set', 'Record a stage result. A pass needs evidence and every earlier stage passed.',
-                           dict(slug=SLUG, stage=text('Stage name.'), status=text('pending, running, passed, failed or blocked.'),
+                           dict(slug=SLUG, stage=text('Stage name.'), status=text('pending, running, passed, failed, blocked; skipped only for explicitly unwanted 3D with verified 2D delivery.'),
                                 evidence=text('What proves it.', default=None), note=text('Note.', default=None)),
                            {'evidence': '--evidence', 'note': '--note'}),
     'ghostrun_isolation_check': ('isolation', 'Check that the builder folder has no route to the reference.', dict(slug=SLUG), {}),

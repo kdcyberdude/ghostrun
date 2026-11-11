@@ -1,13 +1,14 @@
 """Reject incomplete recreation evidence even when a regression baseline passes."""
 import json
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
 import cli
 import completion
 import gate
-from compare import compare, load
+from compare import compare, load, sha256
 from ledger import Ledger, LedgerError
 
 
@@ -251,6 +252,24 @@ def ready_gate_ledger(tmp_path, evidence):
             raw.extend({**row, 'frames': int(row['f'] != 0)}
                        for row in read_rows(evidence.parent / route[role]))
     write_rows(oracle_log, raw)
+    from PIL import Image
+    clear = next(route for route in manifest['routes'] if route['kind'] == 'clear')
+    rows = read_rows(evidence.parent / clear['reference'])
+    manifest['visual_route'] = clear['reference']
+    manifest['visuals'] = []
+    native_frames = oracle_log.parent / 'frames'
+    native_frames.mkdir()
+    for f in (0, 1, len(rows) - 1):
+        reference = evidence.parent / f'native-frame-{f}.png'
+        rebuild = evidence.parent / f'rendered-frame-{f}.png'
+        image = Image.new('RGB', (8, 8), (20 + f, 50, 80))
+        image.save(reference)
+        image.save(rebuild)
+        capture = native_frames / f'{f}-{sha256(reference)}.png'
+        capture.write_bytes(reference.read_bytes())
+        capture.with_suffix('.json').write_text(json.dumps({'f': f, 'observables': rows[f]}))
+        manifest['visuals'].append({'f': f, 'reference': reference.name, 'rebuild': rebuild.name})
+    evidence.write_text(json.dumps(manifest))
     return led
 
 
@@ -279,25 +298,31 @@ def delivery(evidence, monkeypatch):
              'state_hash': f'hash-{f}', 'audio_events': [] if f == 0 else ['pickup']}
             for f in range(4)
         ])
-    for role in ('assets3d', 'build2d', 'build3d', 'video2d', 'video3d'):
+    for role in ('assets3d', 'build2d', 'build3d', 'video2d', 'video3d', 'video_original'):
         manifest[role] = f'{role}.artifact'
         (root / manifest[role]).write_bytes(b'nonempty artifact')
+    manifest['session_recording'] = 'session.cast'
+    (root / manifest['session_recording']).write_text(
+        json.dumps({'version': 2, 'width': 80, 'height': 24}) + '\n' +
+        json.dumps([0.0, 'o', 'Hermes is building\r\n']) + '\n')
     path = root / 'delivery.json'
     path.write_text(json.dumps(manifest))
     calls = []
 
     def probe(args, **kwargs):
         calls.append(args)
+        if not Path(args[-1]).is_file():
+            return SimpleNamespace(returncode=1, stdout='{}')
         return SimpleNamespace(returncode=0, stdout=json.dumps({
             'streams': [{'codec_type': 'video'}], 'format': {'duration': '4.0'}}))
     monkeypatch.setattr('subprocess.run', probe)
     return path, manifest, calls
 
 
-def test_delivery_checks_parity_artifacts_and_probes_both_videos(delivery):
+def test_delivery_checks_parity_artifacts_and_probes_original_2d_and_3d_videos(delivery):
     path, manifest, calls = delivery
     assert completion.delivery(path)['complete']
-    assert [call[-1] for call in calls] == [str(path.parent / manifest[k]) for k in ('video2d', 'video3d')]
+    assert sorted(call[-1] for call in calls) == sorted(str(path.parent / manifest[k]) for k in ('video2d', 'video3d', 'video_original'))
     assert all(call[0] == 'ffprobe' for call in calls)
 
 
@@ -341,6 +366,7 @@ def test_delivery_rejects_invalid_recording(delivery, monkeypatch, data, code):
     assert not report['complete']
     assert 'invalid video: video2d' in report['problems']
     assert 'invalid video: video3d' in report['problems']
+    assert 'invalid video: video_original' in report['problems']
 
 
 @pytest.mark.parametrize('frame', [1.0, True, '1', -1])
@@ -621,3 +647,101 @@ def test_private_reference_authentication_requires_actual_repeated_native_runs(t
     ])
     args = SimpleNamespace(reference_root=str(tmp_path / 'reference'), slug='game', manifest=str(evidence))
     assert not cli.cmd_completion(args)['complete']
+
+
+
+def test_delivery_requires_original_game_video_file(delivery):
+    path, manifest, _ = delivery
+    (path.parent / manifest['video_original']).unlink()
+    report = completion.delivery(path)
+    assert not report['complete']
+    assert 'invalid video: video_original' in report['problems']
+
+
+def test_delivery_rejects_original_game_recording_without_video_stream(delivery, monkeypatch):
+    path, manifest, _ = delivery
+    original = str(path.parent / manifest['video_original'])
+    def probe(args, **kwargs):
+        streams = [] if args[-1] == original else [{'codec_type': 'video'}]
+        return SimpleNamespace(returncode=0, stdout=json.dumps({'streams': streams, 'format': {'duration': '4'}}))
+    monkeypatch.setattr('subprocess.run', probe)
+    report = completion.delivery(path)
+    assert not report['complete']
+    assert 'invalid video: video_original' in report['problems']
+    assert 'invalid video: video2d' not in report['problems']
+    assert 'invalid video: video3d' not in report['problems']
+
+
+@pytest.mark.parametrize('recording', [
+    '',
+    json.dumps({'version': 1}) + '\n' + json.dumps([0, 'o', 'output']) + '\n',
+    json.dumps({'version': 2}) + '\n',
+    json.dumps({'version': 2}) + '\n' + json.dumps([0, 'i', 'input only']) + '\n',
+    json.dumps({'version': 2}) + '\n' + json.dumps([0, 'o', 17]) + '\n',
+])
+def test_delivery_rejects_empty_or_invalid_terminal_session_recording(delivery, recording):
+    path, manifest, _ = delivery
+    (path.parent / manifest['session_recording']).write_text(recording)
+    report = completion.delivery(path)
+    assert not report['complete']
+    assert any('session' in problem for problem in report['problems'])
+
+
+
+@pytest.fixture
+def delivery_2d(delivery):
+    path, manifest, calls = delivery
+    for name in ('render3d', 'assets3d', 'build3d', 'video3d'):
+        (path.parent / manifest.pop(name)).unlink()
+    path.write_text(json.dumps(manifest))
+    return path, manifest, calls
+
+
+def test_explicit_2d_delivery_needs_no_3d_assets_build_or_video(delivery_2d):
+    path, manifest, calls = delivery_2d
+    assert completion.delivery(path, three_d=False)['complete']
+    assert sorted(call[-1] for call in calls) == sorted(
+        str(path.parent / manifest[name]) for name in ('video_original', 'video2d'))
+
+
+def test_2d_delivery_still_requires_original_video(delivery_2d):
+    path, manifest, _ = delivery_2d
+    (path.parent / manifest['video_original']).unlink()
+    report = completion.delivery(path, three_d=False)
+    assert not report['complete']
+    assert 'invalid video: video_original' in report['problems']
+
+
+def test_2d_delivery_still_requires_session_recording(delivery_2d):
+    path, manifest, _ = delivery_2d
+    (path.parent / manifest['session_recording']).write_text('')
+    assert not completion.delivery(path, three_d=False)['complete']
+
+
+def test_explicit_2d_request_can_finish_workflow_by_skipping_only_visual3d(tmp_path, evidence, delivery_2d):
+    led = ready_gate_ledger(tmp_path, evidence)
+    args = SimpleNamespace(reference_root=str(tmp_path / 'reference'), slug='game', stage='gate',
+                           status='passed', evidence=str(evidence), note=None)
+    cli.cmd_set(args)
+    args.stage, args.status, args.evidence = 'visual3d', 'skipped', str(delivery_2d[0])
+    args.note = 'User explicitly requested only 2D.'
+    assert cli.cmd_set(args)['status'] == 'skipped'
+    assert led.next_stage() is None
+
+
+def test_skipping_3d_cannot_bypass_unfinished_recreation(tmp_path, evidence, delivery_2d):
+    led = ready_gate_ledger(tmp_path, evidence)
+    args = SimpleNamespace(reference_root=str(tmp_path / 'reference'), slug='game', stage='visual3d',
+                           status='skipped', evidence=str(delivery_2d[0]), note='2D only')
+    with pytest.raises(LedgerError, match='gate has not passed'):
+        cli.cmd_set(args)
+    assert led.read()['stages']['visual3d']['status'] == 'pending'
+
+
+@pytest.mark.parametrize('stage', ['verify', 'explore', 'gate'])
+def test_no_recreation_or_training_stage_can_be_skipped(tmp_path, stage):
+    led = Ledger(tmp_path / 'state.json')
+    led.create('game', 'recreate')
+    with pytest.raises(LedgerError):
+        led.set(stage, 'skipped', 'User wants only 2D.')
+    assert led.read()['stages'][stage]['status'] == 'pending'

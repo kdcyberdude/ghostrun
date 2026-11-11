@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 
 STAGES = ('intake', 'reward', 'verify', 'explore', 'oracle', 'assets', 'build', 'compare', 'gate', 'visual3d')
-STATUSES = ('pending', 'running', 'passed', 'failed', 'blocked')
+STATUSES = ('pending', 'running', 'passed', 'failed', 'blocked', 'skipped')
 MODES = ('recreate', 'mechanics', 'faithful')
 RIGHTS_BASES = ('owner', 'open-license')
 
@@ -53,14 +53,16 @@ class Ledger:
     def set(self, stage, status, evidence=None, note=None):
         if stage not in STAGES or status not in STATUSES:
             raise LedgerError(f'unknown stage or status: {stage}, {status}')
+        if status == 'skipped' and stage != 'visual3d':
+            raise LedgerError('only the 3D stage may be skipped for an explicit 2D-only request')
         state = self.read()
         if stage not in state['stages']:
             raise LedgerError(f'{stage} is not part of this game workflow')
-        if status in ('running', 'passed'):
+        if status in ('running', 'passed', 'skipped'):
             for earlier in list(state['stages'])[:list(state['stages']).index(stage)]:
                 if state['stages'][earlier]['status'] != 'passed':
                     raise LedgerError(f'{stage} cannot be {status}: {earlier} has not passed')
-        if status == 'passed' and not evidence:
+        if status in ('passed', 'skipped') and not evidence:
             raise LedgerError('a passed stage needs evidence')
         state['stages'][stage] = {'status': status, 'evidence': evidence}
         if note:
@@ -70,4 +72,4 @@ class Ledger:
 
     def next_stage(self):
         state = self.read()
-        return next((s for s, result in state['stages'].items() if result['status'] != 'passed'), None)
+        return next((s for s, result in state['stages'].items() if result['status'] not in ('passed', 'skipped')), None)

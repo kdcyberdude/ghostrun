@@ -98,7 +98,7 @@ def check(manifest_path, contract=None):
             'limit': 'Checks supplied traces; independent review must confirm scope, measurement validity and rendered behaviour.'}
 
 
-def delivery(manifest_path, contract=None):
+def delivery(manifest_path, contract=None, three_d=True):
     """Verify render parity and probe the delivered recordings, without trusting claimed durations."""
     import subprocess
     path = Path(manifest_path).resolve()
@@ -106,7 +106,7 @@ def delivery(manifest_path, contract=None):
     recreation_path = path.parent / manifest['recreation']
     report = check(recreation_path, contract)
     problems = report['problems']
-    traces = [load(path.parent / manifest[k]) for k in ('simulation', 'render2d', 'render3d')]
+    traces = [load(path.parent / manifest[k]) for k in (('simulation', 'render2d', 'render3d') if three_d else ('simulation', 'render2d'))]
     if not traces[0] or any(trace != traces[0] for trace in traces[1:]):
         problems.append('headless, 2D and 3D hash/audio traces differ or are empty')
     if sorted(traces[0]) != list(range(len(traces[0]))) or any(not r.get('state_hash') or not isinstance(r.get('audio_events'), list) for r in traces[0].values()):
@@ -125,11 +125,11 @@ def delivery(manifest_path, contract=None):
         problems.append('parity must cover the complete accepted route with identical inputs')
     if not traces[0] or traces[0][max(traces[0])].get('terminal') != 1:
         problems.append('parity route must reach its ending')
-    for name in ('assets3d', 'build2d', 'build3d'):
+    for name in (('assets3d', 'build2d', 'build3d') if three_d else ('build2d',)):
         p = path.parent / manifest[name]
         if not p.is_file() or not p.stat().st_size:
             problems.append(f'missing artifact: {name}')
-    for name in ('video2d', 'video3d'):
+    for name in (('video_original', 'video2d', 'video3d') if three_d else ('video_original', 'video2d')):
         p = path.parent / manifest[name]
         probe = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(p)],
                                capture_output=True, text=True, timeout=30)
@@ -138,6 +138,14 @@ def delivery(manifest_path, contract=None):
         minimum = max(0, (len(expected) - 1) / 60.0988 - 0.5)
         if probe.returncode or not any(s.get('codec_type') == 'video' for s in data.get('streams', [])) or not math.isfinite(duration) or duration <= 0 or duration < minimum:
             problems.append(f'invalid video: {name}')
+    try:
+        with (path.parent / manifest['session_recording']).open() as recording:
+            header = json.loads(next(recording))
+            event = json.loads(next(recording))
+        if header.get('version') != 2 or not isinstance(event, list) or len(event) != 3 or event[1] != 'o' or not isinstance(event[2], str) or not event[2]:
+            problems.append('invalid terminal session recording')
+    except (OSError, ValueError, StopIteration):
+        problems.append('missing or invalid terminal session recording')
     return {**report, 'complete': not problems}
 
 

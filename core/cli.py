@@ -24,6 +24,7 @@ sys.path[:0] = [str(CORE), str(REWARD10)]
 import compare as compare_mod  # noqa: E402
 import gate as gate_mod  # noqa: E402
 import completion  # noqa: E402
+import visual_check  # noqa: E402
 from prepared_assets import validate_assets  # noqa: E402
 import isolation  # noqa: E402
 from ledger import Ledger, LedgerError, check_rights  # noqa: E402
@@ -104,15 +105,16 @@ def cmd_set(a):
             raise LedgerError('policy training incomplete: ' + '; '.join(report['problems']))
     if a.status == 'passed' and a.stage == 'assets':
         validate_assets(builder_dir(a) / 'assets')
-    if a.status == 'passed' and ledger(a).read()['mode'] == 'recreate' and a.stage in ('gate', 'visual3d'):
+    if a.status in ('passed', 'skipped') and ledger(a).read()['mode'] == 'recreate' and a.stage in ('gate', 'visual3d'):
         contract = ledger(a).read().get('contract')
         if not contract:
             raise LedgerError('verify must pin the full-game reference contract first')
-        report = completion.delivery(a.evidence, contract) if a.stage == 'visual3d' else completion.check(a.evidence, contract)
+        report = completion.delivery(a.evidence, contract, three_d=a.status != 'skipped') if a.stage == 'visual3d' else completion.check(a.evidence, contract)
         recreation = Path(a.evidence)
         if a.stage == 'visual3d':
             recreation = recreation.parent / json.loads(recreation.read_text())['recreation']
         report['problems'].extend(completion.verify_reference(recreation, contract, ref_dir(a) / 'evidence' / 'oracle'))
+        report['problems'].extend(visual_check.check(recreation, ref_dir(a) / 'evidence' / 'oracle'))
         report['complete'] = not report['problems']
         if not report['complete']:
             raise LedgerError('recreation incomplete: ' + '; '.join(report['problems']))
@@ -284,6 +286,7 @@ def cmd_completion(a):
     report = completion.check(a.manifest, state.get('contract'))
     if state.get('mode') == 'recreate':
         report['problems'].extend(completion.verify_reference(a.manifest, state['contract'], ref_dir(a) / 'evidence' / 'oracle'))
+        report['problems'].extend(visual_check.check(a.manifest, ref_dir(a) / 'evidence' / 'oracle'))
         report['complete'] = not report['problems']
     return report
 
