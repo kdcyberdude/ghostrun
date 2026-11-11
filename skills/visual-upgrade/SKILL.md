@@ -11,6 +11,7 @@ Graphics are a separate layer that reads the simulation. They never change it.
 - Keep separate source directories, asset directories, build outputs and launch commands for the 2D and 3D versions. Document how to build and play each independently. The 2D target must not import or load 3D code or assets.
 - Share the gameplay simulation where practical, with both renderers reading it. A visual upgrade must not change simulation behaviour. Keep renderer-specific changes within their own version.
 - Write a contract first: 1 unit = 1 tile, gameplay on plane z=0, no root motion, fixed clip and material names, triangle budgets.
+- Create the mesh kit from procedural Three.js geometry by default. If external or generated models were requested, check that the asset source or generator is available before this stage; record any unavailable asset and continue with the procedural kit.
 - Map tiles to semantic classes, then to instanced kit pieces, every frame from live state. Report any unmapped tile.
 - Animation clip and time are pure functions of simulation counters.
 - Background scenery can sit behind the plane, placed along the camera ray so its screen position holds.

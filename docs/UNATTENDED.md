@@ -10,7 +10,7 @@ GhostRun's heavy and long-running work goes through **plugin tools**, not shell 
 | Setting | Default | Effect on a GhostRun run |
 |---|---|---|
 | `approvals.mode` | `smart` | A guardian model rules on each risky terminal command. Most builder commands (`npm`, `node`, `python`, `ffmpeg`) go through automatically. Only real escalations reach you. |
-| `approvals.single_query_mode` | `deny` | `hermes -q`/`-z` one-shot runs **silently refuse** every dangerous command. Prefer an interactive `hermes chat --query-file …` session for pipeline runs. |
+| `approvals.single_query_mode` | `deny` | One-shot `hermes -q`/`-z` runs refuse dangerous commands unless YOLO is active. Prefer a resumable `hermes chat` session for pipeline runs. |
 | `approvals.unattended_mode` | `deny` | The same refusal for webhook and API-server sessions. |
 | `delegation.subagent_auto_approve` | `false` | A subagent such as the GhostRun builder **auto-denies** an escalated command instead of asking you. |
 
@@ -22,14 +22,12 @@ hermes config set approvals.smart_policy "GhostRun runs: approve builds, tests, 
 hermes config set delegation.subagent_auto_approve true
 ```
 
-**Fully unattended (a dedicated GPU box you can throw away).** No prompts at all, like an auto-approve agent session:
+**Unattended pipeline on a dedicated GPU box.** Keep approval bypass scoped to this chat:
 ```bash
-hermes config set approvals.mode off
 hermes config set delegation.subagent_auto_approve true
-hermes config set approvals.deny '["rm -rf /*", "mkfs*", "git push --force*"]'
 hermes chat --yolo --query-file pipeline-prompt.txt
 ```
-The `approvals.deny` globs still block under `--yolo`, so keep a short list of commands you never want run. Edits to instruction files (AGENTS.md, SOUL.md) still ask, even under `--yolo`.
+`--yolo` bypasses command approvals for that chat, including one-shot command denials. If you want this for every chat on the box, set `approvals.mode off` instead. Neither setting bypasses Hermes's hardline blocks, user `approvals.deny` rules, protected instruction-file writes, or a declared MCP spend limit. Avoid editing `AGENTS.md`, `CLAUDE.md`, or `SOUL.md` during an unattended run; those writes still require a person. Do not route a denied command through a plugin tool to evade a guard.
 
 ## 3D assets
-The `visual-upgrade` skill doesn't need downloads to work. Its kit pieces can be procedural Three.js geometry. Image-to-3D models suit rigid props only, not animated characters. If you want generated props, install your image-to-3D tool before the run and name it in the prompt. The agent records each asset's source in the asset manifest.
+The `visual-upgrade` skill creates its default mesh kit with procedural Three.js geometry, so no model weights or downloaded meshes are needed. If you request external or generated props, provide the asset source or installed image-to-3D tool before that stage; the agent checks its availability and records each asset's source and license in the manifest. Image-to-3D models suit rigid props, not animated characters.
