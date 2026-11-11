@@ -153,3 +153,34 @@ def test_reinitialization_does_not_replace_the_reference_rom(ctx, tmp_path):
     rom.write_bytes(b'different cartridge')
     assert 'already initialized' in json.loads(handler({'slug': 'g', 'rom': str(rom)}))['error']
     assert (Path(ctx.settings['reference_root']) / 'g/game.nes').read_bytes() == b'original'
+
+
+def test_successful_training_starts_monitor_without_an_extra_agent_call(ctx):
+    module = load()
+    plugin = module.Plugin(ctx)
+    plugin.run_cli = lambda *a, **k: json.dumps({'pid': 123, 'run': 'run1'})
+    watched = []
+    plugin.watch_start = lambda args: watched.append(args['slug']) or json.dumps({'watching': args['slug']})
+    for command in ('train-start', 'fix-apply'):
+        result = json.loads(plugin.cli_handler(command, {})({'slug': 'g'}))
+        assert result['watcher']['watching'] == 'g'
+    assert watched == ['g', 'g']
+    plugin.run_cli = lambda *a, **k: json.dumps({'error': 'busy GPU'})
+    assert 'error' in json.loads(plugin.cli_handler('train-start', {})({'slug': 'g'}))
+    assert watched == ['g', 'g']
+
+
+def test_watcher_retries_a_wake_that_was_not_delivered(ctx):
+    plugin = load().Plugin(ctx)
+    report = {'verdict': 'act', 'findings': [{'code': 'early_learning_failure', 'severity': 'act',
+              'evidence': 'three failed plays', 'next_step': 'inspect controls'}]}
+    plugin.run_cli = lambda *a, **k: json.dumps(report)
+    attempts = []
+    ctx.inject_message = lambda *a, **k: attempts.append(a[0]) or len(attempts) > 1
+    class Stop:
+        n = 0
+        def wait(self, _):
+            self.n += 1
+            return self.n > 3
+    plugin.watch_loop('g', 1, Stop())
+    assert len(attempts) == 2

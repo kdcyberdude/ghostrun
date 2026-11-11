@@ -68,3 +68,31 @@ def test_zombie_is_not_alive():
         time.sleep(0.05)
     assert not watch.alive(p.pid)
     p.wait()
+
+
+def early_evaluations(progress=(0.026, 0.1042, 0.0313)):
+    return [{'it': it, 'plays': [{'game': 'maze', 'level': 0, 'end': 'game_over',
+             'parts': {'progress': value, 'score': 0.12, 'stall': -0.65}}]}
+            for it, value in zip((3, 6, 10), progress)]
+
+
+def test_early_penalty_dominated_failure_wakes_diagnosis():
+    rows = [dict(row(it), time=1000 + it * 30) for it in range(1, 11)]
+    findings = watch.check_early_learning(rows, early_evaluations())
+    assert findings[0]['code'] == 'early_learning_failure'
+    assert findings[0]['severity'] == 'act'
+    assert 'not proof' in findings[0]['next_step']
+
+
+def test_early_diagnosis_waits_for_time_and_real_failure():
+    rows = [dict(row(it), time=1000 + it * 10) for it in range(1, 11)]
+    assert not watch.check_early_learning(rows, early_evaluations())
+    rows = [dict(row(it), time=1000 + it * 30) for it in range(1, 11)]
+    assert not watch.check_early_learning(rows, early_evaluations((0.1, 0.4, 0.8)))
+    evals = early_evaluations()
+    evals[-1]['plays'][0]['level'] = 1
+    assert not watch.check_early_learning(rows, evals)
+    evals = early_evaluations()
+    for e in evals:
+        e['plays'][0]['parts']['stall'] = -0.01
+    assert not watch.check_early_learning(rows, evals)

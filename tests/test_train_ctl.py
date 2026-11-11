@@ -117,3 +117,14 @@ def test_start_stop_apply_with_a_real_process(tmp_path, monkeypatch):
     assert '--restart-from' in argv_file.read_text() and '--steps 16' in argv_file.read_text()
     tc.stop(ref, 'g')
     assert g.state['pid'] is None
+
+
+def test_equal_level_after_reward_change_is_not_proof_of_learning(tmp_path):
+    ref, g = game(tmp_path)
+    run = g.run_dir(2)
+    state = g.state
+    state.update(run=str(run), history=[{'best': [0, -0.8]}])
+    g.save(state)
+    for it in (1, 2, 3):
+        write_eval(run, it, 0, 1000.0)
+    assert tc.fix_review(ref, 'g')['verdict'] == 'inconclusive'

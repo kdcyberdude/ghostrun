@@ -59,3 +59,7 @@ So on this run the watcher would have raised the alarm about 600 iterations befo
 - A busy GPU is refused.
 - Each reward version has its own run folder, so curves from different rewards never mix.
 - Reward and throughput going up never count as success. Only test plays do.
+
+## Early learning diagnosis
+
+Successful plugin training starts and reward-fix restarts automatically start the watcher at a one-minute interval. Three recent failed level-zero evaluations after at least three minutes of evaluations trigger `early_learning_failure` when no-progress costs exceed progress/score rewards and progress stays below a quarter of a level. This is a request to diagnose behaviour, not proof of a wrong reward. Longer no-gain findings now also wake the doctor, except completed winning plays. See [reward diagnosis](REWARD_DIAGNOSIS.md). Undelivered notifications are retried; identical accepted notifications are suppressed. Equal-level reward-fix reviews are inconclusive.

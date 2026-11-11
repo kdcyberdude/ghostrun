@@ -142,13 +142,44 @@ def check_learning(rows, evals):
     if len(evals) >= 8:
         half = len(evals) // 2
         if max(median_level(e) for e in evals[half:]) <= max(median_level(e) for e in evals[:half]):
-            found.append(finding('no_test_play_gain', 'watch',
+            if all(p.get('end') == 'won' for e in evals[-3:] for p in e['plays']):
+                return found
+            found.append(finding('no_test_play_gain', 'act',
                                  f'no gain in test-play level across the last {len(evals) - half} evaluations',
                                  'Throughput and reward are not progress. Compare greedy and sampled play.'))
     sps = windows([r['sps'] for r in rows if 'sps' in r], WINDOW)
     if len(sps) >= 3 and sps[-1] < 0.6 * max(sps):
         found.append(finding('throughput_drop', 'watch', f'{max(sps):.0f} -> {sps[-1]:.0f} decisions/s',
                              'Look for another process sharing the CPU or GPU.'))
+    return found
+
+
+def check_early_learning(rows, evals):
+    """Wake for a behavioural diagnosis before long-window regression detectors can fire."""
+    if len(evals) < 3:
+        return []
+    recent = evals[-3:]
+    times = {r['it']: r['time'] for r in rows if 'time' in r}
+    if any(e['it'] not in times for e in recent) or evals[0]['it'] not in times or times[recent[-1]['it']] - times[evals[0]['it']] < 180:
+        return []
+    games = set.intersection(*(set(p['game'] for p in e['plays']) for e in recent))
+    found = []
+    for game in sorted(games):
+        plays = [[p for p in e['plays'] if p['game'] == game] for e in recent]
+        flat = [p for group in plays for p in group]
+        if any(not {'progress', 'stall'} <= set(p.get('parts', {})) or p.get('end') != 'game_over' for p in flat):
+            continue
+        if max(p['level'] for p in flat) > 0:
+            continue
+        gains = [st.median(p['parts']['progress'] for p in group) for group in plays]
+        penalties_dominate = all(-p['parts']['stall'] > max(0, p['parts']['progress']) + max(0, p['parts'].get('score', 0)) for p in flat)
+        if penalties_dominate and max(gains) < 0.25:
+            found.append(finding('early_learning_failure', 'act',
+                                 f'{game}: three recent failed evaluations after at least 3 minutes of evaluations, no level clear, '
+                                 f'progress rewards {gains}; no-progress costs exceed progress and score rewards',
+                                 'Inspect videos and applied controls. Compare stationary play, necessary travel without pickups, '
+                                 'and useful progress using per-term rewards. Check input delivery and greedy versus sampled play. '
+                                 'This calls for diagnosis, not proof that reward weights are wrong; test one supported change.'))
     return found
 
 
@@ -169,7 +200,7 @@ def check_process(run, rows, now):
 def check(run, now):
     rows, evals = read_rows(run), read_evals(run)
     found = (check_numbers(rows) + check_value_fit(rows) + check_levels(rows) + check_ends(rows) + check_evals(evals)
-             + check_learning(rows, evals) + check_process(run, rows, now))
+             + check_learning(rows, evals) + check_early_learning(rows, evals) + check_process(run, rows, now))
     verdict = 'act' if any(f['severity'] == 'act' for f in found) else 'watch' if found else 'healthy'
     return {'verdict': verdict, 'iteration': rows[-1]['it'] if rows else None,
             'decisions': rows[-1].get('decisions') if rows else None, 'test_plays': len(evals), 'findings': found}

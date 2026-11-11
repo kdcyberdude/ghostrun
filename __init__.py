@@ -156,7 +156,13 @@ class Plugin:
     def cli_handler(self, command, flags):
         def handler(args, **_):
             try:
-                return self.run_cli(build_argv(command, flags, args))
+                reply = self.run_cli(build_argv(command, flags, args))
+                if command in ('train-start', 'fix-apply'):
+                    result = json.loads(reply)
+                    if result.get('pid'):
+                        result['watcher'] = json.loads(self.watch_start({'slug': args['slug']}))
+                        return json.dumps(result)
+                return reply
             except (KeyError, OSError) as e:
                 return json.dumps({'error': str(e)})
         return handler
@@ -281,7 +287,7 @@ class Plugin:
         return json.dumps(reply)
 
     def watch_start(self, args, **_):
-        slug, minutes = args['slug'], float(args.get('minutes') or 10)
+        slug, minutes = args['slug'], float(args.get('minutes') or 1)
         if slug in self.watchers:
             return json.dumps({'running': True})
         stop = threading.Event()
@@ -306,8 +312,10 @@ class Plugin:
                 continue
             codes = sorted(f['code'] for f in report.get('findings', []) if f['severity'] == 'act')
             if report.get('verdict') == 'act' and codes != last and not report.get('pending_fix'):
-                self.ctx.inject_message(wake_message(slug, report), role='system')
-            last = codes
+                if self.ctx.inject_message(wake_message(slug, report), role='system'):
+                    last = codes
+            elif report.get('verdict') != 'act':
+                last = codes
 
     # ---- isolation ----
     def guard(self, tool_name, args, task_id='', **_):
@@ -366,7 +374,7 @@ def register(ctx):
                                  dict(slug=SLUG, op=text('hello, reset, step, observe, checkpoint, restore or play.'),
                                       fields=text('JSON of the op fields, for example {"buttons":["RIGHT"],"frames":8}.', default=None))),
         'ghostrun_watch_start': (plugin.watch_start, 'Watch training in the background and wake the agent only when action is needed.',
-                                 dict(slug=SLUG, minutes=number('Minutes between checks.', default=10))),
+                                 dict(slug=SLUG, minutes=number('Minutes between checks.', default=1))),
         'ghostrun_watch_stop': (plugin.watch_stop, 'Stop the background watcher.', dict(slug=SLUG)),
     }
     for name, (handler, description, props) in custom.items():

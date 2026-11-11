@@ -33,3 +33,5 @@ Goal: a module at `games/<slug>.py` that turns RAM into `Signals`. The shared re
 Record each signal as verified, provisional or unverified, and be honest in `INFO['win_status']`. Search reach is proof the reward points forward. It is not evidence of what a policy will learn.
 
 Before passing verify for recreation, implement and screen-check `observables()` for player position, every enemy position/mode, score, lives, level, ending and relevant timers/counters. Record unknowns and continue controlled probes; a reward reader alone is insufficient for frame-by-frame recreation. Preserve full requested-game scope; do not redefine first-level completion as a whole-game win.
+
+Reader verification and reward usefulness are separate acceptance checks. Read docs/REWARD_DIAGNOSIS.md: audit reward components on progress, stationary play, loops and necessary non-pickup travel, using the real training stride. Training starts with an automatic watcher and continues through measured diagnosis and bounded repairs until the requested policy coverage is demonstrated. A search route or passing RAM decoder does not prove the learned policy can play.

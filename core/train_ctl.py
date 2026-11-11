@@ -327,7 +327,9 @@ def fix_review(ref, slug):
     now = st.median(watch.median_level(e) for e in evals[-MIN_REVIEW_PLAYS:])
     if before is None:
         return {'verdict': 'no_baseline', 'now': now}
-    return {'verdict': 'worse' if now < before[0] else 'kept', 'level_before': before[0], 'level_now': now,
+    return {'verdict': 'worse' if now < before[0] else 'kept' if now > before[0] else 'inconclusive',
+            'level_before': before[0], 'level_now': now,
+            'if_inconclusive': 'No measured level gain: compare raw task progress and frozen-policy behaviour; reward totals under changed rewards are not comparable.',
             'if_worse': 'Restore the previous reward from reward_versions and report it; do not tune further.'}
 
 
