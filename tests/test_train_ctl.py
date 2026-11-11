@@ -142,6 +142,10 @@ def test_start_stop_apply_with_a_real_process(tmp_path, monkeypatch):
     assert '--restart-from' in argv_file.read_text() and '--steps 16' in argv_file.read_text()
     tc.stop(ref, 'g')
     assert g.state['pid'] is None
+    resumed = tc.start(ref, 'g', sys.executable, g.state['args'])
+    tc.time.sleep(0.2)
+    assert resumed['version'] == 2 and tc.watch.alive(resumed['pid'])
+    tc.stop(ref, 'g')
 
 
 def test_equal_level_after_reward_change_is_not_proof_of_learning(tmp_path):

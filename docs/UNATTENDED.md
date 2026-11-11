@@ -25,9 +25,11 @@ hermes config set delegation.subagent_auto_approve true
 **Unattended pipeline on a dedicated GPU box.** Keep approval bypass scoped to this chat:
 ```bash
 hermes config set delegation.subagent_auto_approve true
-hermes chat --yolo --query-file pipeline-prompt.txt
+hermes chat --cli --oneshot --yolo --query-file pipeline-prompt.txt
 ```
 `--yolo` bypasses command approvals for that chat, including one-shot command denials. If you want this for every chat on the box, set `approvals.mode off` instead. Neither setting bypasses Hermes's hardline blocks, user `approvals.deny` rules, protected instruction-file writes, or a declared MCP spend limit. Avoid editing `AGENTS.md`, `CLAUDE.md`, or `SOUL.md` during an unattended run; those writes still require a person. Do not route a denied command through a plugin tool to evade a guard.
+
+For a recorded or resumed unattended run, explicit `--cli --oneshot` submits the file as a turn instead of relying on interactive prompt seeding. Add `--resume SESSION_ID` to continue. Verify a new user message and actual tool calls, then training metrics; a restored chat banner alone does not prove the task started. Keep the process alive while monitoring training, and record with a terminal recorder such as asciinema.
 
 ## 3D assets
 The `visual-upgrade` skill creates its default mesh kit with procedural Three.js geometry, so no model weights or downloaded meshes are needed. If you request external or generated props, provide the asset source or installed image-to-3D tool before that stage; the agent checks its availability and records each asset's source and license in the manifest. Image-to-3D models suit rigid props, not animated characters.

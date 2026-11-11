@@ -162,6 +162,7 @@ def gpu_other_users(own_pid=None):
 def launch(game, state, python, args, restart_from=None):
     run = game.run_dir(state['version'])
     run.mkdir(parents=True, exist_ok=True)
+    (run / 'STOP').unlink(missing_ok=True)
     argv = [python, 'rl/train.py', '--run', str(run), '--games', game.slug, *args]
     if restart_from:
         argv += ['--restart-from', str(restart_from)]
