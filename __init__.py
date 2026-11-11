@@ -140,7 +140,7 @@ class Plugin:
         return str(self.setting('python', sys.executable))
 
     def base_argv(self):
-        return [sys.executable, str(CLI), '--reference-root', self.reference_root(), '--builder-root', self.builder_root(),
+        return [self.python(), str(CLI), '--reference-root', self.reference_root(), '--builder-root', self.builder_root(),
                 '--python', self.python()]
 
     def run_cli(self, argv, timeout=DEFAULT_TIMEOUT):

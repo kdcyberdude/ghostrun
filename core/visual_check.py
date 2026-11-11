@@ -5,12 +5,11 @@ This checks supplied captures; the parent still verifies they came from the actu
 import json
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageStat
-
 from compare import load, sha256
 
 
 def check(manifest_path, oracle_root):
+    from PIL import Image, ImageChops, ImageStat
     path = Path(manifest_path).resolve()
     try:
         manifest = json.loads(path.read_text())

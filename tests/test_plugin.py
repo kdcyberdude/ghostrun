@@ -135,3 +135,11 @@ def test_recreate_builder_waits_for_assets(ctx, tmp_path):
     assert init['mode'] == 'recreate'
     reply = json.loads(ctx.tools['ghostrun_builder_enter'][1]({'slug': 'g'}, task_id='builder'))
     assert 'prepare assets' in reply['error']
+
+
+def test_cli_uses_configured_game_runtime(tmp_path):
+    module = load()
+    plugin = module.Plugin(Ctx({'python': '/configured/game/python'}))
+    argv = plugin.base_argv()
+    assert argv[0] == '/configured/game/python'
+    assert argv[argv.index('--python') + 1] == '/configured/game/python'
