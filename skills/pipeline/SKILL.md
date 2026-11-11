@@ -15,8 +15,8 @@ Use the game path and reconstruction target supplied by the user. Initialize the
 2. **reward, verify**: `skill_view("ghostrun:reward-discovery")`.
 3. **explore**: `skill_view("ghostrun:gpu-env-port")`, then `ghostrun_train_start` and `ghostrun_watch_start`. `skill_view("ghostrun:training-doctor")` handles anything the watcher raises. A search route from `ghostrun_reward_search` is acceptable when training is not wanted.
 4. **oracle**: `ghostrun_oracle_start` with the trained player or the route.
-5. **build, compare, gate**: delegate to a subagent with `delegate_task`. Its first call must be `ghostrun_builder_enter`, and it follows `skill_view("ghostrun:rebuild-from-oracle")`. Give it only the slug and the requested reconstruction target.
-6. If the requested target includes 2.5D or 3D, run `skill_view("ghostrun:visual-upgrade")` after the gate passes and create its assets. Otherwise this stage is optional.
+5. **build, compare, gate**: delegate to a subagent with `delegate_task`. Its first call must be `ghostrun_builder_enter`, and it follows `skill_view("ghostrun:rebuild-from-oracle")`. Give it only the slug, the requested reconstruction target and the completion requirements from `rebuild-from-oracle`. On return, inspect its recreation-status report and evidence. If meaningful differences or missing full-route coverage remain, resume the builder with the next experiment; repeat autonomously within the user’s budget. A regression PASS alone cannot complete these stages.
+6. If the requested target includes 2.5D or 3D, run `skill_view("ghostrun:visual-upgrade")` only after the recreation completion requirements are met and the gate passes, then create its assets. Otherwise this stage is optional.
 
 ## Working rules
 - Make routine decisions yourself. Ask about cloud spending or anything that cannot be undone.

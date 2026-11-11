@@ -31,3 +31,7 @@ hermes chat --yolo --query-file pipeline-prompt.txt
 
 ## 3D assets
 The `visual-upgrade` skill creates its default mesh kit with procedural Three.js geometry, so no model weights or downloaded meshes are needed. If you request external or generated props, provide the asset source or installed image-to-3D tool before that stage; the agent checks its availability and records each asset's source and license in the manifest. Image-to-3D models suit rigid props, not animated characters.
+
+## Recreation continues until verified
+
+The builder repeats observe, compare, diagnose, fix and full-route regression checks. The parent reviews `evidence/recreation-status.md` and resumes incomplete builder work across delegation/context limits. Local fixture passes do not authorize the 3D stage. Completion requires full requested-route coverage, fresh held-out runs, no known material deterministic mismatch, and separate evidence for uncontrolled randomness. A user time or spending limit still ends the run as incomplete when those requirements are unmet.
