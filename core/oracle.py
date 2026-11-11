@@ -48,6 +48,7 @@ class NesBackend:
     def reset(self):
         self.nes.load(self.power_on)
         self.game.boot(self.nes)
+        self.boot_frames = self.nes.frame
 
     def step(self, buttons, frames):
         self.nes.step(tuple(buttons), frames)
@@ -167,7 +168,7 @@ class Oracle:
             self._record([], 0)
             if self.player:
                 self.player.reset(png_bytes(self.backend.screen()))
-            return self._reply(True)
+            return self._reply(True, boot_frames=getattr(self.backend, 'boot_frames', 0))
         if op == 'observe':
             return self._reply(bool(req.get('image')))
         if op == 'step':

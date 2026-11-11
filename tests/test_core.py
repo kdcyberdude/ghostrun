@@ -269,3 +269,10 @@ def test_recorded_policy_decisions_do_not_depend_on_search_action_set(tmp_path):
     route.write_text(json.dumps(data))
     with pytest.raises(LedgerError, match='frames'):
         cli.route_decisions(SimpleNamespace(ACTIONS=[]), route)
+
+
+def test_oracle_reset_exposes_boot_alignment_without_shifting_gameplay_frame(tmp_path):
+    backend = Fake()
+    backend.boot_frames = 613
+    reply = Oracle(backend, tmp_path).handle({'op': 'reset'})
+    assert reply['boot_frames'] == 613 and reply['frame'] == 0
