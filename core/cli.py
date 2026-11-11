@@ -1,0 +1,284 @@
+"""Stage runner. Every plugin tool is a thin call to one of these commands, and each prints one JSON object.
+
+Layout (the two roots must not overlap):
+  <reference_root>/<slug>/  game.nes, games/<slug>.py, evidence/, state.json   private to the reference side
+  <builder_root>/<slug>/    the independent game, tools/oracle_client.py       has no route to the reference except the socket
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+CORE = Path(__file__).resolve().parent
+REWARD10 = CORE.parent / 'engine' / 'scripts' / 'reward10'
+sys.path[:0] = [str(CORE), str(REWARD10)]
+
+import compare as compare_mod  # noqa: E402
+import gate as gate_mod  # noqa: E402
+import isolation  # noqa: E402
+from ledger import Ledger, LedgerError, check_rights  # noqa: E402
+import train_ctl  # noqa: E402
+
+
+def ref_dir(a):
+    return Path(a.reference_root).expanduser() / a.slug
+
+
+def builder_dir(a):
+    return Path(a.builder_root).expanduser() / a.slug
+
+
+def ledger(a):
+    return Ledger(ref_dir(a) / 'state.json')
+
+
+def socket_path(a):
+    """Short and outside both roots: Unix socket paths are limited to about 100 characters."""
+    key = hashlib.sha256(str(ref_dir(a).resolve()).encode()).hexdigest()[:12]
+    return Path(tempfile.gettempdir()) / f'oracle-{key}.sock'
+
+
+def cmd_init(a):
+    if not isolation.paths_are_separate(a.reference_root, a.builder_root):
+        raise LedgerError('reference and builder folders must not overlap')
+    rights = json.loads(a.rights) if a.rights else None
+    check_rights(a.mode, rights)
+    ref, build = ref_dir(a), builder_dir(a)
+    (ref / 'games').mkdir(parents=True, exist_ok=True)
+    (ref / 'evidence').mkdir(exist_ok=True)
+    (build / 'tools').mkdir(parents=True, exist_ok=True)
+    rom = Path(a.rom).expanduser().resolve(strict=True)
+    shutil.copyfile(rom, ref / 'game.nes')
+    (ref / 'game.nes').chmod(0o600)
+    module = ref / 'games' / f'{a.slug}.py'
+    digest = hashlib.sha256(rom.read_bytes()).hexdigest()
+    if not module.exists():
+        module.write_text((CORE / 'templates' / 'game_module.py').read_text().replace('<sha256>', digest))
+    shutil.copyfile(CORE / 'oracle_client.py', build / 'tools' / 'oracle_client.py')
+    (build / '.oracle.json').write_text(json.dumps({'socket': str(socket_path(a)), 'mode': a.mode}))
+    led = ledger(a)
+    led.create(a.slug, a.mode, rights)
+    led.set('intake', 'passed', f'rom sha256 {digest}')
+    return {'slug': a.slug, 'mode': a.mode, 'rom_sha256': digest, 'module': str(module), 'builder': str(build),
+            'read_first': [str(REWARD10 / 'README.md'), str(module)], 'next': led.next_stage()}
+
+
+def cmd_status(a):
+    led = ledger(a)
+    if not led.path.exists():
+        root = Path(a.reference_root).expanduser()
+        games = sorted(p.parent.name for p in root.glob('*/state.json')) if root.is_dir() else []
+        return {'error': f"No game '{a.slug}' yet. Start one with ghostrun_init.", 'games': games}
+    return {**led.read(), 'next': led.next_stage()}
+
+
+def cmd_set(a):
+    state = ledger(a).set(a.stage, a.status, a.evidence, a.note)
+    return {'stage': a.stage, **state['stages'][a.stage]}
+
+
+def reward_env(a):
+    return {**os.environ, 'REWARD10_GAMES_ROOT': str(ref_dir(a)),
+            'PYTHONPATH': os.pathsep.join([str(ref_dir(a)), str(REWARD10)])}
+
+
+def run_reward_tool(a, argv):
+    p = subprocess.run([a.python, *argv], env=reward_env(a), cwd=ref_dir(a), capture_output=True, text=True)
+    return {'exit_code': p.returncode, 'stdout': p.stdout[-6000:], 'stderr': p.stderr[-3000:]}
+
+
+def cmd_reward_check(a):
+    return run_reward_tool(a, [str(REWARD10 / 'contract.py')])
+
+
+def cmd_audit(a):
+    out = ref_dir(a) / 'evidence' / 'audit'
+    res = run_reward_tool(a, [str(REWARD10 / 'audit.py'), a.slug, 'random', '--episodes', str(a.episodes),
+                              '--steps', str(a.steps), '--out', str(out)])
+    return {**res, 'evidence': str(out)}
+
+
+def cmd_search(a):
+    out = ref_dir(a) / 'evidence' / 'search'
+    res = run_reward_tool(a, [str(REWARD10 / 'search.py'), a.slug, '--seconds', str(a.seconds), '--workers',
+                              str(a.workers), '--out', str(out)])
+    return {**res, 'evidence': str(out)}
+
+
+def route_decisions(game, result_path):
+    """Expand a search result's action indices into (buttons, frames) decisions."""
+    decisions = []
+    for i in json.loads(Path(result_path).read_text())['acts']:
+        act = game.ACTIONS[i]
+        decisions += [(list(b), f) for b, f in act] if isinstance(act, list) else [(list(act), 8)]
+    return decisions
+
+
+def cmd_oracle(a):
+    """Runs in the foreground until stopped. It needs the emulator runtime, so start it with that Python."""
+    import importlib
+    from oracle import NesBackend, Oracle, PolicyPlayer, ReplayPlayer, serve
+    os.environ['REWARD10_GAMES_ROOT'] = str(ref_dir(a))
+    game = importlib.import_module(f'games.{a.slug}')
+    player = None
+    if a.route:
+        player = ReplayPlayer(route_decisions(game, a.route))
+    elif a.policy:
+        player = PolicyPlayer(a.policy.split())
+    backend = NesBackend(game)
+    backend.reset()
+    serve(Oracle(backend, ref_dir(a) / 'evidence' / 'oracle' / a.session, player), socket_path(a))
+
+
+def cmd_isolation(a):
+    problems = isolation.scan(builder_dir(a), ref_dir(a))
+    return {'isolated': not problems, 'problems': problems}
+
+
+def cmd_import_assets(a):
+    """Faithful mode only: copy an already prepared, rights-cleared asset folder. Nothing is extracted from a ROM."""
+    state = ledger(a).read()
+    if state['mode'] != 'faithful':
+        raise LedgerError('mechanics mode uses original art; assets can only be imported in faithful mode')
+    src = Path(a.source).expanduser().resolve(strict=True)
+    if not (src / 'manifest.json').exists():
+        raise LedgerError('the asset folder needs a manifest.json listing each file and its licence')
+    dest = builder_dir(a) / 'assets'
+    shutil.copytree(src, dest, dirs_exist_ok=True)
+    return {'imported': str(dest), 'files': sum(1 for p in dest.rglob('*') if p.is_file())}
+
+
+def cmd_balance(a):
+    res = run_reward_tool(a, [str(CORE / 'balance.py'), a.slug, '--steps', str(a.steps)])
+    return res
+
+
+def progress_unit(a):
+    """Read the game's PROGRESS_UNIT in the reward runtime, which holds the imports the module needs."""
+    code = f"import importlib;print(importlib.import_module('games.{a.slug}').PROGRESS_UNIT)"
+    p = subprocess.run([a.python, '-c', code], env=reward_env(a), cwd=ref_dir(a), capture_output=True, text=True)
+    if p.returncode:
+        raise LedgerError(f'cannot load the game module: {p.stderr[-800:]}')
+    return float(p.stdout)
+
+
+def cmd_lint(a):
+    import reward_lint
+    problems = reward_lint.lint_dir(ref_dir(a) / 'evidence' / a.folder, progress_unit(a))
+    return {'clean': not problems, 'problems': problems[:40], 'total': len(problems)}
+
+
+def cmd_engine_setup(a):
+    return train_ctl.engine_setup(ref_dir(a), a.slug, a.boot_frames)
+
+
+def cmd_parity(a):
+    return train_ctl.parity(ref_dir(a), a.slug, a.python)
+
+
+def cmd_train_start(a):
+    return train_ctl.start(ref_dir(a), a.slug, a.python, a.args.split() if a.args else [], a.share_gpu)
+
+
+def cmd_train_stop(a):
+    return train_ctl.stop(ref_dir(a), a.slug)
+
+
+def cmd_watch(a):
+    return train_ctl.check(ref_dir(a), a.slug)
+
+
+def cmd_fix_begin(a):
+    return train_ctl.fix_begin(ref_dir(a), a.slug, a.finding, a.hypothesis)
+
+
+def cmd_fix_validate(a):
+    return train_ctl.fix_validate(ref_dir(a), a.slug, a.python, reward_env(a), progress_unit(a))
+
+
+def cmd_fix_apply(a):
+    return train_ctl.fix_apply(ref_dir(a), a.slug, a.python)
+
+
+def cmd_fix_review(a):
+    return train_ctl.fix_review(ref_dir(a), a.slug)
+
+
+def read_tolerances(a):
+    return json.loads(Path(a.tolerances).read_text())
+
+
+def cmd_compare(a):
+    return compare_mod.compare(a.reference, a.rebuild, read_tolerances(a))
+
+
+def baseline_path(a):
+    return ref_dir(a) / 'evidence' / 'gate-baseline.json'
+
+
+def cmd_gate(a):
+    if a.save_baseline:
+        return {'saved': gate_mod.save_baseline(a.reference, a.rebuild, read_tolerances(a), baseline_path(a))}
+    return gate_mod.run(a.reference, a.rebuild, read_tolerances(a), baseline_path(a))
+
+
+def parser():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--reference-root', default=os.environ.get('REBUILD_REFERENCE_ROOT', '~/.local/share/rebuild/reference'))
+    ap.add_argument('--builder-root', default=os.environ.get('REBUILD_BUILDER_ROOT', '~/rebuild-projects'))
+    ap.add_argument('--python', default=os.environ.get('REBUILD_PYTHON', sys.executable))
+    sub = ap.add_subparsers(dest='cmd', required=True)
+
+    def add(name, fn, *args):
+        p = sub.add_parser(name)
+        p.set_defaults(fn=fn)
+        p.add_argument('slug')
+        for flag, kw in args:
+            p.add_argument(flag, **kw)
+
+    add('init', cmd_init, ('--rom', dict(required=True)), ('--mode', dict(default='mechanics')), ('--rights', {}))
+    add('status', cmd_status)
+    add('set', cmd_set, ('stage', {}), ('status', {}), ('--evidence', {}), ('--note', {}))
+    add('reward-check', cmd_reward_check)
+    add('audit', cmd_audit, ('--episodes', dict(type=int, default=12)), ('--steps', dict(type=int, default=3000)))
+    add('search', cmd_search, ('--seconds', dict(type=float, default=300)), ('--workers', dict(type=int, default=8)))
+    add('balance', cmd_balance, ('--steps', dict(type=int, default=600)))
+    add('lint', cmd_lint, ('--folder', dict(default='audit')))
+    add('engine-setup', cmd_engine_setup, ('--boot-frames', dict(type=int, required=True)))
+    add('parity', cmd_parity)
+    add('train-start', cmd_train_start, ('--args', {}), ('--share-gpu', dict(action='store_true')))
+    add('train-stop', cmd_train_stop)
+    add('watch', cmd_watch)
+    add('fix-begin', cmd_fix_begin, ('--finding', dict(required=True)), ('--hypothesis', dict(required=True)))
+    add('fix-validate', cmd_fix_validate)
+    add('fix-apply', cmd_fix_apply)
+    add('fix-review', cmd_fix_review)
+    add('oracle', cmd_oracle, ('--session', dict(default='default')), ('--route', {}), ('--policy', {}))
+    add('isolation', cmd_isolation)
+    add('import-assets', cmd_import_assets, ('--source', dict(required=True)))
+    trace = (('--reference', dict(required=True)), ('--rebuild', dict(required=True)), ('--tolerances', dict(required=True)))
+    add('compare', cmd_compare, *trace)
+    add('gate', cmd_gate, *trace, ('--save-baseline', dict(action='store_true')))
+    return ap
+
+
+def main():
+    a = parser().parse_args()
+    try:
+        result = a.fn(a)
+    except (LedgerError, train_ctl.TrainError, FileNotFoundError) as e:
+        print(json.dumps({'error': str(e)}))
+        sys.exit(1)
+    if result is not None:
+        print(json.dumps(result, indent=1))
+
+
+if __name__ == '__main__':
+    main()

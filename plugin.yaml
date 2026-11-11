@@ -1,0 +1,44 @@
+name: ghostrun
+version: 0.1.0
+manifest_version: 2
+description: Teach an agent a retro game by playing it, then rebuild the game in Three.js against a black-box oracle.
+kind: standalone
+license: MIT
+tags: [games, reinforcement-learning, threejs, cuda]
+requires_hermes: ">=0.23.0"
+python_runtime: external
+provides_tools:
+  - ghostrun_init
+  - ghostrun_reward_check
+  - ghostrun_reward_audit
+  - ghostrun_reward_lint
+  - ghostrun_reward_balance
+  - ghostrun_reward_search
+  - ghostrun_engine_setup
+  - ghostrun_engine_parity
+  - ghostrun_train_start
+  - ghostrun_train_stop
+  - ghostrun_train_check
+  - ghostrun_fix_begin
+  - ghostrun_fix_validate
+  - ghostrun_fix_apply
+  - ghostrun_fix_review
+  - ghostrun_assets_import
+  - ghostrun_status
+  - ghostrun_stage_set
+  - ghostrun_isolation_check
+  - ghostrun_compare
+  - ghostrun_gate
+  - ghostrun_reference_enter
+  - ghostrun_builder_enter
+  - ghostrun_oracle_start
+  - ghostrun_oracle_stop
+  - ghostrun_oracle_call
+  - ghostrun_watch_start
+  - ghostrun_watch_stop
+provides_hooks:
+  - pre_tool_call
+config_schema:
+  reference_root: {type: str, default: "", description: "Private folder for ROMs, rewards and training. Default is the plugin's data folder."}
+  builder_root: {type: str, default: "", description: "Folder for rebuilt games. Must not overlap the reference folder."}
+  python: {type: str, default: "", description: "Python with stable-retro, numpy, Pillow and PyTorch. Default is the Hermes Python."}

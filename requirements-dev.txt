@@ -1,0 +1,5 @@
+# CPU unit tests; GPU and emulator dependencies are in requirements-runtime.txt.
+pytest>=8,<10
+numpy>=1.26,<3
+Pillow>=10,<13
+PyYAML>=6,<7

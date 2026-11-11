@@ -1,0 +1,29 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Game files and trained weights
+*.nes
+*.pt
+*.pth
+*.onnx
+
+# Generated binaries and build output
+*.so
+*.o
+build/
+dist/
+
+# Private launch notes
+/launch/
