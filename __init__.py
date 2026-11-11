@@ -66,10 +66,13 @@ REFERENCE_TOOLS = {
                               dict(slug=SLUG, boot_frames=number('Frames from power-on to first control.')),
                               {'boot_frames': '--boot-frames'}),
     'ghostrun_engine_parity': ('parity', 'Prove the CUDA reward equals the Python reward, bit for bit.', dict(slug=SLUG), {}),
-    'ghostrun_train_start': ('train-start', 'Start GPU training in the background. Refuses a GPU that is already in use.',
+    'ghostrun_train_start': ('train-start', 'Default to the tested Mario training recipe. Explicit overrides are allowed and disclosed; explain them with recipe_note. First runs a bounded throughput preflight; longer training requires its measured result. Refuses a busy GPU.',
                              dict(slug=SLUG, args=text('Extra rl/train.py arguments.', default=None),
+                                  smoke={'type':'boolean','description':'Bounded diagnostic only; cannot qualify production training.','default':None},
+                                  adjustment_evidence=text('Optional owned run directory recording measured reasons for resource changes.', default=None),
+                                  recipe_note=text('Explain an explicit user request or reason for a custom recipe. Tell the user what changed; no approval step is added.', default=None),
                                   share_gpu={'type': 'boolean', 'description': 'Train even though another process uses the GPU. Only if the user agreed.', 'default': None}),
-                             {'args': '--args', 'share_gpu': '--share-gpu'}),
+                             {'args': '--args', 'share_gpu': '--share-gpu', 'smoke':'--smoke', 'adjustment_evidence':'--adjustment-evidence', 'recipe_note':'--recipe-note'}),
     'ghostrun_train_stop': ('train-stop', 'Stop training gracefully, writing a checkpoint first.', dict(slug=SLUG), {}),
     'ghostrun_train_check': ('watch', 'Check training health now: healthy, watch or act, with evidence. '
                              'On act, load skill_view("ghostrun:training-doctor").', dict(slug=SLUG), {}),
@@ -383,7 +386,7 @@ class Plugin:
 def wake_message(slug, report):
     items = '\n'.join(f"- {f['code']}: {f['evidence']}. {f['next_step']}" for f in report['findings'] if f['severity'] == 'act')
     return (f'GhostRun training watcher, game {slug}, iteration {report.get("iteration")}, needs action.\n{items}\n'
-            'Before repairing, confirm training is still active; do not restart an intentionally stopped run.\n'
+            'Respect intentional user stops and remaining runtime. A scheduled preflight exit is expected; follow its reported next step.\n'
             f'Load skill_view("{PLUGIN}:training-doctor") and follow it. Fixes used: {report.get("fixes_used")} of {report.get("fix_budget")}.')
 
 

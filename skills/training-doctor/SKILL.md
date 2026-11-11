@@ -9,6 +9,7 @@ The watcher raised a finding. Find the real cause before changing anything. Most
 
 ## Diagnose
 1. `ghostrun_train_check` for current findings and how many fixes remain.
+   On `preflight_ready`, inspect the measured speed and original requested arguments, then continue with `ghostrun_train_start` using the remaining budget. On `preflight_incomplete` or `preflight_failed`, diagnose startup/failures or insufficient runtime before retrying; do not begin long training. A retry preserves the failed measurements in a separate run. The tested Mario recipe is the default recommendation. Explicit alternatives are allowed; record `recipe_note` and explain changes to the user. Do not silently shrink the model because learning is weak. See `gpu-env-port` for resource measurements and diagnostic runs.
 2. Look at behaviour, not curves. Open the videos and summaries of recent test plays in the run's `eval/` and `videos/`.
 3. Compare two frozen models, from before and after the change. Compare greedy with sampled play.
 4. Read the actual button streams. A policy frozen by one held button looks like an entropy problem and is not.

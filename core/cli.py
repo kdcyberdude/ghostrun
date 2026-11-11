@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import shlex
 import tempfile
 import uuid
 
@@ -311,7 +312,8 @@ def cmd_parity(a):
 
 
 def cmd_train_start(a):
-    return train_ctl.start(ref_dir(a), a.slug, a.python, a.args.split() if a.args else [], a.share_gpu)
+    return train_ctl.start(ref_dir(a), a.slug, a.python, shlex.split(a.args) if a.args else [], a.share_gpu,
+                           a.smoke, a.adjustment_evidence, a.recipe_note)
 
 
 def cmd_train_stop(a):
@@ -405,7 +407,8 @@ def parser():
     add('lint', cmd_lint, ('--folder', dict(default='audit')))
     add('engine-setup', cmd_engine_setup, ('--boot-frames', dict(type=int, required=True)))
     add('parity', cmd_parity)
-    add('train-start', cmd_train_start, ('--args', {}), ('--share-gpu', dict(action='store_true')))
+    add('train-start', cmd_train_start, ('--args', {}), ('--share-gpu', dict(action='store_true')),
+        ('--smoke', dict(action='store_true')), ('--adjustment-evidence', {}), ('--recipe-note', {}))
     add('train-stop', cmd_train_stop)
     add('watch', cmd_watch)
     add('fix-begin', cmd_fix_begin, ('--finding', dict(required=True)), ('--hypothesis', dict(required=True)))

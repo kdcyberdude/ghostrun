@@ -89,8 +89,9 @@ if busy:
     r=tool('ghostrun_train_start',{'slug':'tg'},R); check('train refuses busy GPU','GPU is in use' in json.dumps(r),r)
 else:
     print('SKIP live busy-GPU refusal: no competing GPU job (unit test covers refusal)',flush=True)
-CPU='--device cpu --envs-per-game 1 --steps 8 --minibatch-envs 4 --epochs 1 --eval-every-minutes 0 --total-iters 3'
-r=tool('ghostrun_train_start',{'slug':'tg','args':CPU},R); check('train_start real CPU run',r.get('pid'),r); run=Path(r.get('run','/x'))
+CPU='--device cpu --envs-per-game 1 --steps 8 --minibatch-envs 4 --epochs 1 --core 64 --moods 0 --compile 0 --eval-every-minutes 0 --total-iters 3'
+r=tool('ghostrun_train_start',{'slug':'tg','args':CPU,'smoke':True},R); check('train_start real CPU run',r.get('pid'),r); run=Path(r.get('run','/x'))
+check('CPU diagnostic is labelled and cannot qualify production',r.get('training_policy',{}).get('phase')=='smoke',r)
 check('train_start automatically enabled watcher',r.get('watcher',{}).get('watching')=='tg',r)
 for _ in range(400):
     if (run/'metrics.jsonl').exists() and len((run/'metrics.jsonl').read_text().splitlines())>=3: break

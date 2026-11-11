@@ -75,6 +75,8 @@ Give Hermes a game ROM and ask:
 
 Check progress at any time with `/ghostrun <game>`.
 
+New games default to the tested Mario training recipe. Explicit alternatives are allowed and recorded with their differences and reason; explain them to the user without adding an approval step. The harness measures the selected setup in a bounded preflight before longer training. See [Training](docs/TRAINING.md#recommended-harness-baseline).
+
 ## Test it
 
 ```bash

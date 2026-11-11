@@ -4,6 +4,18 @@ The rebuild needs a player that can reach every part of the game. This page cove
 
 All numbers come from local runs on one RTX 5090. The game used for most of them is a 32-level NES platformer.
 
+## Recommended harness baseline
+
+For a new game, `ghostrun_train_start` defaults to `core/training-baseline.json`, sourced from the frozen tested Mario `/work/models/model.pt` (SHA-256 `2ed7aa22e30e8c14954dcc77a869830dc064885b689ff7b1ccfafdcdc70d0aeb`). The moving latest checkpoint has different experimental settings and is not the default. Game-specific level filters and output paths are excluded explicitly. The recommended model has core 512, 8 moods and 6,336,359 parameters. Reward discovery is a separate problem.
+
+Defaults include 8,192 parallel consoles, 64-step sequences, 32 minibatch environments, compilation enabled, inference chunks of 512, γ .995, λ .98, return β .98 and diversity coefficient .001. The values below describe the standalone engine's defaults/history; the harness passes the recommended recipe explicitly.
+
+Explicit overrides are allowed. Use `args` and `recipe_note` to record the user's request or the reason for an experiment, and explain the differences to the user. No approval step is added. The tool labels alternatives as `custom` and records the full differences and model source hash. With no arguments, an existing selected recipe resumes; a new game chooses the tested recommendation.
+
+The first start uses a three-iteration preflight with a 180-second trainer limit. Before longer training it requires the owned checkpoint, clean exit and valid measured throughput from the same selected settings, model source and GPU. `ghostrun_train_check` wakes the agent when the preflight is ready. Continue with the original requested arguments and remaining time budget; runtime-only changes preserve the optimizer and environment. Throughput evidence never counts as learning evidence.
+
+Resource changes should follow measured capacity where possible. Optional `adjustment_evidence` names an owned run whose memory/failure observations and hashes are retained. Every difference and reason is stored in `training-policy.json`, and changed settings need their own preflight. Explicit `smoke=true` permits a bounded diagnostic but cannot qualify or seed production. Incompatible legacy checkpoints remain in place while a separate version starts; active owned trainers are never silently reconfigured.
+
 ## The policy
 
 | Part | What it is | Why |
@@ -42,7 +54,7 @@ Episodes that end by game over, win, level skip or stall are terminal. A rollout
 
 Resume is exact: environments, RNG, optimizer, GRU state and counters. See [Reliability](RELIABILITY.md#exact-resume).
 
-Through the plugin, unchanged training arguments resume that state. Changing only runtime limits or checkpoint/evaluation/log frequency also resumes without resetting the optimizer. Sampling or learning changes fork a checkpointed run into a new version using its latest weights and fresh environment/optimizer state, preserving the previous run. Keep the model architecture compatible with those weights. This allows measured sampling changes without pretending they are reward fixes.
+Through the plugin, unchanged training arguments resume that state. Changing only runtime limits or checkpoint/evaluation/log frequency also resumes without resetting the optimizer. Sampling or learning changes fork into a new version, preserving the previous run. Compatible model weights are reused with fresh environment/optimizer state; a different architecture starts fresh. This allows explicit experiments without pretending they are reward fixes.
 
 ## Exploration
 

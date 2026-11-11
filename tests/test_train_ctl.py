@@ -3,12 +3,15 @@ import json
 import pytest
 
 import train_ctl as tc
+import training_policy as policy
 
 
 def game(tmp_path, code='A = 1\n'):
     ref = tmp_path / 'g'
     (ref / 'games').mkdir(parents=True)
     (ref / 'games' / 'g.py').write_text(code)
+    (ref / 'engine/rl').mkdir(parents=True)
+    (ref / 'engine/rl/model.py').write_bytes((tc.ENGINE / 'rl/model.py').read_bytes())
     return ref, tc.Game(ref, 'g')
 
 
@@ -59,21 +62,24 @@ def test_changed_sampling_config_preserves_checkpoint_and_forks_without_reward_f
     checkpoint = run / 'ckpt_rank0_latest.pt'
     checkpoint.write_bytes(b'preserved latest weights')
     state = g.state
-    state.update(version=1, run=str(run), args=['--envs-per-game', '128'])
+    settings, changed = policy.parse(['--device', 'cpu', '--envs-per-game', '4096'], smoke=True)
+    previous = policy.plan(g, settings, changed, smoke=True)
+    state.update(version=1, run=str(run), args=policy.argv(settings), training_policy=previous)
     g.save(state)
     monkeypatch.setattr(tc, 'gpu_other_users', lambda *_: [])
     launched = []
-    def launch(game, state, python, args, restart_from=None):
+    def launch(game, state, python, args, restart_from=None, training_policy=None):
         launched.append((state, args, restart_from))
         return {'version': state['version']}
     monkeypatch.setattr(tc, 'launch', launch)
-    assert tc.start(ref, 'g', 'python3', state['args'])['version'] == 1
+    assert tc.start(ref, 'g', 'python3', state['args'], smoke=True)['version'] == 1
     assert launched[-1][2] is None
-    assert tc.start(ref, 'g', 'python3', [*state['args'], '--time-limit=180', '--eval-threads', '2'])['version'] == 1
+    runtime = [*state['args'], '--time-limit=180', '--eval-threads', '2']
+    assert tc.start(ref, 'g', 'python3', runtime, smoke=True)['version'] == 1
     assert launched[-1][2] is None
-    result = tc.start(ref, 'g', 'python3', ['--envs-per-game', '8192'])
+    result = tc.start(ref, 'g', 'python3', ['--device', 'cpu', '--envs-per-game', '8192'], smoke=True)
     fork = launched[-1][0]
-    assert result['version'] == 2 and launched[-1][2] == checkpoint
+    assert result['version'] == 2 and launched[-1][2] is None
     assert fork['fixes_used'] == 0 and fork['history'][0]['run'] == str(run)
     assert checkpoint.read_bytes() == b'preserved latest weights'
     assert (g.versions / 'v002' / 'g.py').exists()
@@ -123,9 +129,8 @@ def test_start_stop_apply_with_a_real_process(tmp_path, monkeypatch):
     import sys
     ref, g = game(tmp_path)
     monkeypatch.setattr(tc, 'gpu_other_users', lambda *_: [])
-    (g.engine / 'rl').mkdir(parents=True)
     (g.engine / 'rl' / 'train.py').write_text(FAKE_TRAINER)
-    started = tc.start(ref, 'g', sys.executable, ['--steps', '16'])
+    started = tc.start(ref, 'g', sys.executable, ['--device', 'cpu', '--steps', '16'], smoke=True)
     assert started['version'] == 1 and tc.watch.alive(started['pid'])
     with pytest.raises(tc.TrainError, match='already running'):
         tc.start(ref, 'g', sys.executable, [])
@@ -137,6 +142,7 @@ def test_start_stop_apply_with_a_real_process(tmp_path, monkeypatch):
     g.save(state)
     applied = tc.fix_apply(ref, 'g', sys.executable)
     assert applied['version'] == 2 and applied['restarted_from'].endswith('it000007/model.pt')
+    assert g.state['training_policy']['restart_from'] == applied['restarted_from']
     assert not tc.watch.alive(started['pid']) or (g.run_dir(1) / 'STOP').exists()
     assert (g.versions / 'v002' / 'g.py').read_text() == 'A = 2\n'
     state = g.state
@@ -149,7 +155,7 @@ def test_start_stop_apply_with_a_real_process(tmp_path, monkeypatch):
     assert '--restart-from' in argv_file.read_text() and '--steps 16' in argv_file.read_text()
     tc.stop(ref, 'g')
     assert g.state['pid'] is None
-    resumed = tc.start(ref, 'g', sys.executable, g.state['args'])
+    resumed = tc.start(ref, 'g', sys.executable, g.state['args'], smoke=True)
     tc.time.sleep(0.2)
     assert resumed['version'] == 2 and tc.watch.alive(resumed['pid'])
     tc.stop(ref, 'g')

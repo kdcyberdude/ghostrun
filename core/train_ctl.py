@@ -17,6 +17,7 @@ import sys
 import time
 
 import reward_lint
+import training_policy as policy
 import watch
 
 CORE = Path(__file__).resolve().parent
@@ -159,10 +160,13 @@ def gpu_other_users(own_pid=None):
     return [int(p) for p, mib in rows if mib.strip().isdigit() and int(mib) >= GPU_BUSY_MIB and int(p) != own_pid]
 
 
-def launch(game, state, python, args, restart_from=None):
+def launch(game, state, python, args, restart_from=None, training_policy=None):
     run = game.run_dir(state['version'])
     run.mkdir(parents=True, exist_ok=True)
     (run / 'STOP').unlink(missing_ok=True)
+    if training_policy is not None:
+        write_json(run / 'training-policy.json', training_policy)
+        state['training_policy'] = training_policy
     argv = [python, 'rl/train.py', '--run', str(run), '--games', game.slug, *args]
     if restart_from:
         argv += ['--restart-from', str(restart_from)]
@@ -172,7 +176,7 @@ def launch(game, state, python, args, restart_from=None):
     (run / 'pid').write_text(str(p.pid))
     state.update(pid=p.pid, run=str(run), args=list(args))
     game.save(state)
-    return {'pid': p.pid, 'run': str(run), 'version': state['version']}
+    return {'pid': p.pid, 'run': str(run), 'version': state['version'], 'training_policy': training_policy}
 
 
 def state_args(args):
@@ -189,30 +193,68 @@ def state_args(args):
     return result
 
 
-def start(ref, slug, python, args, share_gpu=False):
+def start(ref, slug, python, args, share_gpu=False, smoke=False, adjustment_evidence=None, recipe_note=None):
     game = Game(ref, slug)
     state = game.state
     if state['pid'] and watch.alive(state['pid']):
         raise TrainError(f"training already running as process {state['pid']}")
-    on_cpu = 'cpu' in [b for a, b in zip(args, args[1:]) if a == '--device']
+    previous = state.get('training_policy')
+    if not args and previous and (previous['phase'] == 'smoke') == smoke:
+        args = previous.get('requested_args', state['args'])
+    settings, changed = policy.parse(args, smoke)
+    on_cpu = settings['device'] == 'cpu'
     others = [] if on_cpu else gpu_other_users()
     if others and not share_gpu:
         raise TrainError(f'the GPU is in use by process(es) {others}; refusing to share it')
+    if not adjustment_evidence and previous and previous.get('adjustment_evidence'):
+        adjustment_evidence = previous['adjustment_evidence']['run']
+    if recipe_note is None and previous and all(previous['settings'][k] == settings[k] for k in policy.BASELINE['settings']):
+        recipe_note = previous.get('recipe_note')
+    plan = policy.plan(game, settings, changed, smoke, adjustment_evidence, recipe_note)
+    plan['requested_args'] = policy.argv(settings)
+    failed_preflight = None
+    try:
+        measured = None if smoke or not state['run'] else policy.throughput(state['run'], previous, plan)
+    except policy.PolicyError as exc:
+        failed_preflight, measured = str(exc), None
+    if measured:
+        plan.update(phase='production', throughput=measured)
+    else:
+        plan['settings'] = policy.bounded(settings)
+    args = policy.argv(plan['settings'])
+    restart_from = None
+    reason = None
     if state['version'] == 0:
         state['version'] = 1
         snapshot(game, 1, {'reason': 'first reward'})
-    elif state_args(args) != state_args(state['args']) and state['run']:
+    elif state['run'] and (failed_preflight or not previous or (previous['phase'] == 'smoke') != smoke or
+                           any(previous.get(k) != plan.get(k) for k in ('baseline_sha256', 'hardware', 'model_sha256')) or
+                           state_args(args) != state_args(state['args'])):
         checkpoint = Path(state['run']) / 'ckpt_rank0_latest.pt'
-        if checkpoint.exists():
-            model, key = best_model(state['run'])
-            reason = {'reason': 'training configuration changed', 'previous_args': state['args'], 'args': list(args)}
-            state['history'].append({'version': state['version'], 'run': state['run'],
-                                     'best_model': str(model) if model else None, 'best': key, **reason})
-            state['version'] += 1
-            snapshot(game, state['version'], reason)
-            return {**launch(game, state, python, args, restart_from=checkpoint),
-                    'restarted_from': str(checkpoint), 'reason': reason['reason']}
-    return launch(game, state, python, args)
+        same_model = previous and previous['phase'] != 'smoke' and previous.get('model_sha256') == plan['model_sha256'] and all(
+            previous['settings'][k] == settings[k] for k in ('core', 'moods'))
+        if same_model and not failed_preflight:
+            restart_from = checkpoint if checkpoint.exists() else previous.get('restart_from')
+        model, key = best_model(state['run'])
+        reason = {'reason': failed_preflight or ('training configuration changed' if same_model else 'start selected recipe; preserve incompatible/unverified old run'),
+                  'previous_args': state['args'], 'args': list(args)}
+        state['history'].append({'version': state['version'], 'run': state['run'],
+                                 'best_model': str(model) if model else None, 'best': key, **reason})
+        state['version'] += 1
+        snapshot(game, state['version'], reason)
+    elif previous and previous.get('restart_from') and not (Path(state['run']) / 'ckpt_rank0_latest.pt').exists():
+        restart_from = previous['restart_from']
+    if restart_from and not Path(restart_from).is_file():
+        raise TrainError('the recorded restart checkpoint is missing; existing results were preserved')
+    plan['restart_from'] = str(restart_from) if restart_from else None
+    if not reason and previous and not restart_from:
+        plan['restart_from'] = previous.get('restart_from')
+    result = launch(game, state, python, args, restart_from=restart_from, training_policy=plan)
+    return {**result, 'restarted_from': str(restart_from) if restart_from else None,
+            'reason': reason['reason'] if reason else None,
+            'next': 'Short diagnostic only; never use this configuration for production.' if smoke else
+                    'Measured preflight accepted; monitor learning.' if measured else
+                    'Wait for the bounded preflight, inspect throughput, then use requested_args with --time-limit reduced to the remaining user budget; do not copy internal bounds.'}
 
 
 def stop(ref, slug, timeout=1200):
@@ -241,6 +283,27 @@ def check(ref, slug):
     report = watch.check(state['run'], time.time())
     report.update(version=state['version'], fixes_used=state['fixes_used'], fix_budget=MAX_FIXES,
                   pending_fix=state['pending_fix'])
+    plan = state.get('training_policy')
+    if plan:
+        report['training_phase'] = plan['phase']
+        report['training_recipe'] = plan['recipe']
+        report['recipe_notice'] = plan['notice']
+        report['recipe_note'] = plan['recipe_note']
+        report['requested_args'] = plan.get('requested_args', state['args'])
+    if plan and plan['phase'] == 'preflight' and (Path(state['run']) / 'CLEAN_EXIT').exists():
+        gpu = None if plan['settings']['device'] == 'cpu' else policy.hardware()
+        try:
+            measured = policy.throughput(state['run'], plan, {**plan, 'hardware': gpu})
+            problem = None
+        except policy.PolicyError as exc:
+            measured, problem = None, str(exc)
+        report['throughput'] = measured
+        code = 'preflight_failed' if problem else 'preflight_ready' if measured else 'preflight_incomplete'
+        report['findings'].append(watch.finding(code, 'act',
+            problem or ('Selected-recipe preflight finished; measured throughput is available.' if measured else 'Preflight ended before three valid measurements.'),
+            'Call train-start using requested_args with --time-limit reduced to the remaining user budget; reward discovery is separate.' if measured else
+            'Inspect the owned preflight logs and runtime budget before retrying; do not launch a long run.'))
+        report['verdict'] = 'act'
     folder = game.ref / 'evidence' / 'watch'
     folder.mkdir(parents=True, exist_ok=True)
     with open(folder / f"v{state['version']:03d}.jsonl", 'a') as f:
@@ -325,18 +388,33 @@ def fix_apply(ref, slug, python):
     fix = state['pending_fix']
     if not fix or not fix['validated'] or fix['validated'] != sha(game.module):
         raise TrainError('the fix is not validated, or the reader changed after validation')
+    prior = state.get('training_policy')
+    if not prior:
+        raise TrainError('legacy training has no recorded recipe; select and measure it with train-start before applying a reward fix')
+    smoke = prior['phase'] == 'smoke'
+    settings, changed = policy.parse(prior.get('requested_args', state['args']), smoke)
+    source = (prior.get('adjustment_evidence') or {}).get('run')
+    plan = policy.plan(game, settings, changed, smoke, source, prior.get('recipe_note'))
+    plan['requested_args'] = policy.argv(settings)
+    plan['settings'] = policy.bounded(settings)
+    if settings['device'] != 'cpu' and gpu_other_users(state['pid']):
+        raise TrainError('the GPU is in use by another process; existing owned run was left unchanged')
     if state['pid']:
         stop(ref, slug)
         state = game.state
     old_run = state['run']
     model, key = best_model(old_run)
+    latest = Path(old_run) / 'ckpt_rank0_latest.pt'
+    if model is None and latest.exists():
+        model = latest
+    plan['restart_from'] = str(model) if model else None
     state['history'].append({'version': state['version'], 'run': old_run, 'best_model': str(model) if model else None,
                              'best': key, 'fix': fix})
     state['version'] += 1
     state['fixes_used'] += 1
     state['pending_fix'] = None
     snapshot(game, state['version'], fix)
-    return {**launch(game, state, python, state['args'], restart_from=model), 'restarted_from': str(model) if model else None,
+    return {**launch(game, state, python, policy.argv(plan['settings']), restart_from=model, training_policy=plan), 'restarted_from': str(model) if model else None,
             'review': f'After {MIN_REVIEW_PLAYS} test plays, run fix-review.'}
 
 

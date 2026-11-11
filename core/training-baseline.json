@@ -1,0 +1,71 @@
+{
+  "id": "mario-tested-20261110c",
+  "source": {
+    "checkpoint": "/work/models/model.pt",
+    "sha256": "2ed7aa22e30e8c14954dcc77a869830dc064885b689ff7b1ccfafdcdc70d0aeb",
+    "choice": "Frozen tested gameplay model; do not follow the moving latest checkpoint.",
+    "excluded_game_specific_fields": [
+      "games",
+      "only_levels",
+      "place_k",
+      "place_per_level",
+      "places",
+      "run"
+    ]
+  },
+  "model_sha256": "752ca5766cc954aec9eb30629ff9f6bbd99a526e3f98b2b4cb107e44ccdfcb9c",
+  "parameters": 6336359,
+  "reference_gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "memory_mib": 32607
+  },
+  "settings": {
+    "envs_per_game": 8192,
+    "steps": 64,
+    "epochs": 2,
+    "minibatch_envs": 32,
+    "lr": 0.00025,
+    "adam_eps": 1e-05,
+    "gamma": 0.995,
+    "lam": 0.98,
+    "clip": 0.2,
+    "ent_coef": 0.01,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "ret_beta": 0.98,
+    "moods": 8,
+    "div_coef": 0.001,
+    "div_margin": 0.1,
+    "int_coef": 0.0,
+    "mood_kick": 0.07,
+    "level_starts": 1.0,
+    "level_cap": 64,
+    "adv_norm": "game",
+    "core": 512,
+    "seed": 1,
+    "sticky": 1,
+    "idle_max": 30,
+    "dropout": 1,
+    "precision": "auto",
+    "deterministic": 0,
+    "device": "cuda",
+    "compile": 1,
+    "compile_mode": "max-autotune-no-cudagraphs",
+    "obs_host": 1,
+    "infer_chunk": 512,
+    "obs_slots": 2,
+    "lag": 0,
+    "per_game_rollout": 1,
+    "rollout_split": 1
+  },
+  "runtime": {
+    "time_limit": 0.0,
+    "ckpt_minutes": 10.0,
+    "ckpt_iters": 0,
+    "eval_every_minutes": 15.0,
+    "eval_steps": 100000,
+    "eval_threads": 16,
+    "total_iters": 0,
+    "log_every": 1
+  }
+}
