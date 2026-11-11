@@ -7,6 +7,7 @@ Questions, and where the answer lives. Docs first, then skills and code.
 | Question | Answer |
 |---|---|
 | What is GhostRun, in one page? | [README](../README.md) |
+| Can I play the research rebuild? | [GhostRun Arcade](https://kdcyberdude.github.io/ghostrun-arcade/), [source and preview](https://github.com/kdcyberdude/ghostrun-arcade) |
 | How do the stages fit together? | [Architecture](ARCHITECTURE.md#stages) |
 | Why does it work at all? | [Architecture](ARCHITECTURE.md#why-it-works) |
 | How do I run it for hours without approval prompts? | [Unattended](UNATTENDED.md) |

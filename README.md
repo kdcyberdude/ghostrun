@@ -3,7 +3,9 @@
 **Give Hermes a retro game. It works out how the game scores, trains a player on your GPU, then rebuilds the game in Three.js by watching that player, without ever seeing the game's code.**
 
 <!-- DEMO VIDEO: paste the link or embed here (under 90 seconds) -->
-> 🎬 **Demo video:** _coming soon_
+> 🎮 **[Play the 2D research showcase](https://kdcyberdude.github.io/ghostrun-arcade/)** · [Source and 20-second gameplay preview](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.1.0-preview)
+>
+> The short end-to-end plugin demo is still being prepared. The playable showcase is the earlier Mario research rebuild.
 
 Writing a playable scene is easier than reproducing a whole game's physics, enemies and level transitions. GhostRun gives the agent a reference it can test: a trained player to explore the game, and a black box it can ask "if I press this, what happens next?"
 
