@@ -7,9 +7,7 @@ description: Build an independent Three.js game by observing a black-box oracle,
 
 You are the builder. Your first call must be `ghostrun_builder_enter`. You see only your workspace and `ghostrun_oracle_call`: actions in, frames and declared numbers out. Never look for the ROM, the reference folder or an emulator, and never put an emulator or a replay behind the canvas. The game must be a real, independent simulation.
 
-Check the mode with `ghostrun_status`.
-- **mechanics**: invent your own name, characters, art, music and level layouts. Use the oracle to learn how things move and interact: jump arcs, speeds, gravity, timing, enemy behaviour. Do not trace frames or reproduce level geometry.
-- **faithful**: assets arrive in `assets/` with a licence manifest. Keep the licences with the build.
+Read the project configuration with `ghostrun_status` and follow the requested reconstruction target. Prepared assets arrive in `assets/`; retain any accompanying notices.
 
 ## Spine first, before gameplay
 1. Reference wrapper: a small script over `ghostrun_oracle_call` that runs a probe and writes a per-frame JSONL trace.

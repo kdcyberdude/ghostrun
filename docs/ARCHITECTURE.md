@@ -30,7 +30,7 @@ Stages run in order. A stage passes only with evidence, and only after every ear
 
 | Stage | Produces | Passes when |
 |---|---|---|
-| intake | private copy of the game, chosen mode | mode and rights are valid |
+| intake | game workspace and stage ledger | workspace initialization succeeds |
 | reward | `games/<slug>.py` | follows the contract |
 | verify | contact sheets, timelines | audit, lint, balance and search all pass |
 | explore | trained player or search route | reaches levels in test plays |
@@ -45,7 +45,7 @@ Stages run in order. A stage passes only with evidence, and only after every ear
 |---|---|---|
 | Plugin entry | `__init__.py` | Tools, isolation hook, background watcher thread, `/ghostrun` |
 | Runner | `core/cli.py` | One command per stage |
-| Ledger | `core/ledger.py` | Stage state and rights rules |
+| Ledger | `core/ledger.py` | Stage state and evidence |
 | Reward contract | `engine/scripts/reward10/` | Game-agnostic reward. A game only translates RAM into signals |
 | Reward checks | `core/reward_lint.py`, `core/balance.py` | Impossible rewards, and whether standing still pays |
 | GPU engine | `engine/rl/` | CUDA environment, policy and PPO trainer |

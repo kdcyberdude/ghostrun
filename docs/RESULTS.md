@@ -21,7 +21,7 @@ Local experiments on one RTX 5090 measured:
 - **12 NES games** with reward readers checked against on-screen score and death events.
 - **3.2 million reward steps** with exact agreement between the Python and GPU implementations.
 - **9,000–10,000 training decisions per second** with a 6.33-million-parameter policy that acts from pixels.
-- **8 exported players**, checked over **102,636 frames**, with no button mismatches between the compiled player and the source model.
+- **8 full games** played by an exported player, checked over **102,636 frames**, with no button mismatches between the compiled player and the source model.
 
 Reward-reader coverage means the training signals have been checked; completion and generalization are evaluated separately for each trained player.
 

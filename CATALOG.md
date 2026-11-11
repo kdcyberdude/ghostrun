@@ -19,4 +19,4 @@ Disclosure for the Hermes plugin catalog (rule 13).
 
 **Binaries:** none in the repository. The emulator's CPU and CUDA libraries are compiled from source on your machine, inside the plugin's data folder.
 
-**Requirements:** Linux and an NVIDIA GPU with CUDA for training. No ROMs or model weights are bundled.
+**Requirements:** Linux and an NVIDIA GPU with CUDA for training.

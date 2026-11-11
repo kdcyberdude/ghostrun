@@ -21,6 +21,16 @@ Today's models can write a one-screen game. Multi-level games fall apart, becaus
 
 The 2D rebuild stays independently playable. An optional 2.5D or 3D version lives alongside it with separate renderer code, assets, build outputs and launch commands. Both may share gameplay simulation code; adding 3D must preserve the 2D version.
 
+## Why it's useful
+
+- **Preserve and remaster.** Old games become readable code, checked frame by frame, that runs at 4K or in 3D.
+- **Test games automatically.** A player that reaches every level, plus a gate that fails any build that got worse.
+- **Mod and remix.** Levels, difficulty and accessibility become code changes, not ROM hacks.
+- **Rebuild anything you can only observe.** The oracle pattern fits legacy UIs and firmware, not just games.
+- **Learn from it.** Reward design, CUDA emulation and recurrent PPO in one small, working codebase, with the real bugs written up.
+
+More in [Applications](docs/APPLICATIONS.md).
+
 ## Why a plugin
 
 A prompt can't do this. GhostRun adds things only a plugin can:
@@ -32,7 +42,7 @@ A prompt can't do this. GhostRun adds things only a plugin can:
 
 ## What runs on your computer
 
-- **Setup:** downloads a fixed version of the NeSLE emulator source from GitHub and compiles it locally, using `git`, `nvcc`, `c++` and your configured Python. It uses `nvidia-smi` to check GPU use.
+- **GPU environment:** includes the parallel rollout environment, reward code and trainer. Setup fetches a pinned NeSLE revision, applies the included emulator extensions, and compiles locally with `git`, `nvcc`, `c++` and your configured Python. It uses `nvidia-smi` to check GPU use. The same patch is published as a NeSLE fork at [kdcyberdude/NeSLE](https://github.com/kdcyberdude/NeSLE), branch `ghostrun`. See [GPU environment](docs/GPU_ENGINE.md).
 - **Files:** reads the ROM you provide and stores training files and rebuilt games in the configured folders.
 - **Background work:** its tools can start GPU training, a local service that runs the reference game, and a training watcher. The watcher can wake the agent to edit the game's reward function and restart training, with a limit of three fixes per game.
 - **Privacy:** no telemetry or stored credentials.
@@ -41,7 +51,7 @@ See [the full disclosure](CATALOG.md) for details.
 
 ## Install
 
-Install from [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun), or follow [Contributing](CONTRIBUTING.md#local-checks) for a local source checkout. Access to the repository is required while it is private:
+Install from [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun), or follow [Contributing](CONTRIBUTING.md#local-checks) for a local source checkout.:
 
 ```bash
 hermes plugins install kdcyberdude/ghostrun
@@ -54,11 +64,11 @@ Training needs an NVIDIA GPU with CUDA and a Python with [`requirements-runtime.
 
 ## Use it
 
-Bring a game you have the right to use, then ask Hermes:
+Give Hermes a game ROM and ask:
 
-> Use the ghostrun pipeline on `thwaite.nes`. It's GPL-3.0, here's the source: `<link>`.
+> Use the ghostrun pipeline on `/path/to/game.nes`.
 
-Check progress at any time with `/ghostrun thwaite`.
+Check progress at any time with `/ghostrun <game>`.
 
 ## Test it
 
@@ -70,14 +80,9 @@ The CPU unit suite runs without Hermes or a GPU. See [Contributing](CONTRIBUTING
 
 The end-to-end check runs all 28 tools through a real Hermes install. Its docstring has the instructions: [`tests/integration/hermes_itest.py`](tests/integration/hermes_itest.py).
 
-## Two modes
-
-- **Mechanics (default):** learn how a game moves and feels, then build a new game with your own characters, art, music and levels.
-- **Faithful:** rebuild a game using its own material. Only for games you own or that are openly licensed, and you have to say which.
-
-No ROMs, game art, music or model weights ship with this plugin, and it doesn't extract any.
-
 ## Status
+
+Early preview, developed from single-game research and a focused set of training and integration checks. Broad validation across a large game library is ongoing.
 
 GhostRun builds on earlier single-game player and reconstruction work. This plugin brings reward discovery, GPU training, a training watcher, a black-box oracle and trace comparison into Hermes. The current training work extends that foundation across games and genres. See [Results](docs/RESULTS.md) for the single-game results, infrastructure measurements and ongoing experiments.
 
@@ -99,7 +104,12 @@ The entry point and manifest stay at the root for Hermes discovery. Training out
 
 ## Learn more
 
+Not sure where to look? Start with the [question index](docs/INDEX.md).
+
 - [Architecture: how it works and why](docs/ARCHITECTURE.md)
+- [Rewards: discovered from RAM, proven against the screen](docs/REWARDS.md)
+- [Training: the policy, exploration and the bugs that mattered](docs/TRAINING.md)
+- [Reliability: what guarantees what, and what isn't validated](docs/RELIABILITY.md)
 - [Training watcher and self-repair](docs/TRAINING_WATCHER.md)
 - [GPU environment](docs/GPU_ENGINE.md)
 - [Lessons: what to do and what not to do](docs/LESSONS.md)
@@ -110,5 +120,3 @@ The entry point and manifest stay at the root for Hermes discovery. Training out
 - [Publishing to GitHub and submitting the catalog PR](docs/PUBLISHING.md)
 
 <!-- MORE VIDEOS: training montage, watcher catching a bug, 2D vs 3D side by side -->
-
-MIT licensed. Third-party notices are in [THIRD_PARTY.md](THIRD_PARTY.md).

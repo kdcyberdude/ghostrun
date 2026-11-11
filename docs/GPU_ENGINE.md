@@ -2,6 +2,14 @@
 
 Most RL on retro games runs emulators on the CPU and copies frames to the GPU. GhostRun runs the consoles **on the GPU**, computes the reward there too, and feeds the policy without a per-step trip to the host.
 
+## Distribution and setup
+
+GhostRun includes the GPU rollout environment, reward implementation, policy and trainer under `engine/`. The emulator is based on NeSLE, with the mapper and renderer extensions supplied in `engine/third_party/nesle-extensions.patch`.
+
+`ghostrun_engine_setup` fetches upstream revision `0b04d8b9b6a93eea6758b06519206d8f13f6db78`, applies the patch and builds the host library. The rollout environment is compiled locally when used. This makes the current environment reproducible without a separate emulator fork. For convenience, the patched tree is also published at [kdcyberdude/NeSLE](https://github.com/kdcyberdude/NeSLE), branch `ghostrun`.
+
+The ROM is selected when a game workspace is initialized. Emulator setup and game inputs are separate steps.
+
 ## What's in it
 
 | Part | File | Notes |

@@ -14,7 +14,7 @@ Graphics are a separate layer that reads the simulation. They never change it.
 - Map tiles to semantic classes, then to instanced kit pieces, every frame from live state. Report any unmapped tile.
 - Animation clip and time are pure functions of simulation counters.
 - Background scenery can sit behind the plane, placed along the camera ray so its screen position holds.
-- Use art you made or properly licensed art (CC0 scans are good), and record the source of each file in a manifest.
+- Record the source of each asset in a manifest and retain any accompanying notices.
 - Image-to-3D models give fused meshes with baked poses. They suit rigid props and references, not animated characters.
 
 **Prove it:** build and launch both versions independently, and verify that the 2D version still works with the 3D assets and build output absent. Run the same inputs headless, in 2D and in 3D, and require identical simulation hashes and audio events. Then measure frame time at the target resolution.

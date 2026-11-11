@@ -38,6 +38,6 @@ Keep changes focused. Run the unit suite before submitting a PR; changes to rewa
 
 Record measured results with their evaluation conditions. Label compute estimates and planned experiments so readers can tell them apart from completed runs.
 
-Keep ROMs, trained weights, local configuration and generated binaries outside the source tree. Preserve the license notices for third-party code in [THIRD_PARTY.md](THIRD_PARTY.md).
+Keep local configuration, training outputs and generated binaries outside the source tree.
 
 See [Publishing](docs/PUBLISHING.md) for the GitHub repository and Hermes catalog PR workflow.

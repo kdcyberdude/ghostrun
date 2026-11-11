@@ -1,6 +1,6 @@
 # Publishing GhostRun
 
-The repository is [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun). It is private during preparation, with `main` as the default branch. The repository name matches `plugin.yaml`, the tool prefix and the `/ghostrun` command; the local checkout folder can have any name.
+The repository is [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun). It is public, with `main` as the default branch. The repository name matches `plugin.yaml`, the tool prefix and the `/ghostrun` command; the local checkout folder can have any name.
 
 ## Update the repository
 
