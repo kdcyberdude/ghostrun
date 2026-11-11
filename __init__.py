@@ -46,7 +46,8 @@ REFERENCE_TOOLS = {
                               dict(slug=SLUG, manifest=text('Path to evaluation manifest with checkpoint and native input evidence.'),
                                    final={'type': 'boolean', 'description': 'Check final successful learning coverage.', 'default': False}),
                               {'manifest': '--manifest', 'final': '--final'}),
-    'ghostrun_init': ('init', 'Start a game: copy the ROM into the private reference folder and create its stage ledger. '
+    'ghostrun_init': ('init', 'Start recreating an NES game as an editable browser game. Use when the user supplies an NES ROM and asks to rebuild or remake it. '
+                      'Copy the ROM into the private reference folder and create its stage ledger. '
                       'Before the first call, load skill_view("ghostrun:pipeline") and follow it. '
                       'Default recreate preserves observed levels and mechanics using independent code and authored assets. '
                       'mechanics is an explicitly requested remix; faithful imports prepared assets and needs rights.',

@@ -1,6 +1,8 @@
 # GhostRun
 
-**Give Hermes a retro game. It works out how the game scores, trains a player on your GPU, then rebuilds the game in Three.js by watching that player, without ever seeing the game's code.**
+**Recreate NES games as browser games you can play and change.**
+
+GhostRun gives Hermes the tools to learn how a game plays, rebuild its levels and mechanics, and check the result against the original. Start with a 2D recreation, then change the levels, difficulty or look—including a 3D version.
 
 **[Watch the film](https://kdcyberdude.github.io/ghostrun-arcade/film/)** · **[Play Mario](https://kdcyberdude.github.io/ghostrun-arcade/)** · **[Game source](https://github.com/kdcyberdude/ghostrun-arcade)**
 

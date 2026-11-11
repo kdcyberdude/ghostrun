@@ -1,6 +1,6 @@
 ---
 name: pipeline
-description: Run the whole GhostRun pipeline for one game, from ROM to tested Three.js rebuild. Use when the user wants to teach Hermes a game or rebuild one.
+description: Use when the user asks to recreate, remake or remaster an NES game, train an AI to play it, or add a 3D version to a recreation. Guide the agent through learning the game, rebuilding its levels and mechanics as an editable browser game, and checking the result.
 ---
 
 # GhostRun pipeline
