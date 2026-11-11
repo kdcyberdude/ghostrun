@@ -2,10 +2,9 @@
 
 **Give Hermes a retro game. It works out how the game scores, trains a player on your GPU, then rebuilds the game in Three.js by watching that player, without ever seeing the game's code.**
 
-<!-- DEMO VIDEO: paste the link or embed here (under 90 seconds) -->
-> 🎮 **[Play the 2D research showcase](https://kdcyberdude.github.io/ghostrun-arcade/)** · [70-second demo and source](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.2.0-demo)
->
-> The short end-to-end plugin demo is still being prepared. The playable showcase is the earlier Mario research rebuild.
+**[Watch the film](https://kdcyberdude.github.io/ghostrun-arcade/film/)** · **[Play Mario](https://kdcyberdude.github.io/ghostrun-arcade/)** · **[Game source](https://github.com/kdcyberdude/ghostrun-arcade)**
+
+The film introduces GhostRun through our Mario recreation, with gameplay and a first-level 3D preview.
 
 Writing a playable scene is easier than reproducing a whole game's physics, enemies and level transitions. GhostRun gives the agent a reference it can test: a trained player to explore the game, and a black box it can ask "if I press this, what happens next?"
 
@@ -90,7 +89,7 @@ Early preview, developed from single-game research and a focused set of training
 
 GhostRun builds on earlier single-game player and reconstruction work. This plugin brings reward discovery, GPU training, a training watcher, a black-box oracle and trace comparison into Hermes. The current training work extends that foundation across games and genres. See [Results](docs/RESULTS.md) for the single-game results, infrastructure measurements and ongoing experiments.
 
-The 32-level Mario rebuild is the research foundation, not evidence that one unattended Hermes run completed the entire pipeline. The recorded Hermes integration test uses a generated test cartridge; a new game's end-to-end demo must be measured separately.
+The Mario research project spans 32 levels. For measured results, supported workflows and current limitations, see [Results](docs/RESULTS.md) and [Reliability](docs/RELIABILITY.md).
 
 ## Code and trained players
 

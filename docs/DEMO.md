@@ -1,12 +1,14 @@
-# Record a demo people can verify
+# Film and gameplay recordings
 
-The Mario rebuild and published players demonstrate the research behind GhostRun. They do not establish that the Hermes plugin rebuilt Mario in one unattended run. The plugin's recorded 28-tool integration test uses a generated cartridge. Keep these demonstrations labelled separately.
+[Watch the GhostRun film](https://kdcyberdude.github.io/ghostrun-arcade/film/) — an 86-second introduction with narration, gameplay and a first-level 3D preview. The page has a built-in player and a download link.
 
-## Published showcase
+[Play Mario](https://kdcyberdude.github.io/ghostrun-arcade/) — the interactive 2D browser game.
 
-The [70-second demo](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.2.0-demo) includes native recordings, actual Hermes builder initialization, an experimental first-level 3D preview and a same-input 2D/3D clip. Its attached provenance identifies each source and the soundtrack. [Play the public 2D game](https://kdcyberdude.github.io/ghostrun-arcade/) and see [current verification and limitations](https://github.com/kdcyberdude/ghostrun-arcade/blob/main/docs/VERIFICATION.md).
+[Browse the game source](https://github.com/kdcyberdude/ghostrun-arcade) — Three.js code and local setup instructions.
 
-The public release is 2D only. Recovered 3D code and assets are preserved on [a separate preview branch](https://github.com/kdcyberdude/ghostrun-arcade/tree/codex/recovered-3d-preview) for later work. The combined development build passed 1,131 tests and production interface checks. A 900-frame comparison preserves simulation state and 15 audio events across both renderers. A full replay of the fixed native route currently fails after reaching 1-2, so these clips are not presented as a native-equivalent 32-level browser clear.
+[Download gameplay recordings](https://github.com/kdcyberdude/ghostrun-lab/releases/tag/gameplay-with-sound-20261112) — separate original-NES and Three.js clips with sound, plus capture metadata. These are recording archives, separate from the narrated film.
+
+For engineering measurements and known differences, see [Reliability](RELIABILITY.md) and the arcade's [verification notes](https://github.com/kdcyberdude/ghostrun-arcade/blob/main/docs/VERIFICATION.md).
 
 ## Capture the plugin working
 
