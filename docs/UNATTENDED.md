@@ -31,6 +31,8 @@ hermes chat --cli --oneshot --yolo --query-file pipeline-prompt.txt
 
 For a recorded or resumed unattended run, explicit `--cli --oneshot` submits the file as a turn instead of relying on interactive prompt seeding. Add `--resume SESSION_ID` to continue. Verify a new user message and actual tool calls, then training metrics; a restored chat banner alone does not prove the task started. Keep the process alive while monitoring training, and record with a terminal recorder such as asciinema.
 
+After updating the plugin, use Hermes's supported plugin reload and start a new chat for its Python tools. Existing chats can retain the old tool handlers; replacing source files alone does not verify the new runtime. Preserve the game workspace and checkpoints when starting that new chat.
+
 ## 3D assets
 The `visual-upgrade` skill creates its default mesh kit with procedural Three.js geometry, so no model weights or downloaded meshes are needed. If you request external or generated props, provide the asset source or installed image-to-3D tool before that stage; the agent checks its availability and records each asset's source and license in the manifest. Image-to-3D models suit rigid props, not animated characters.
 
