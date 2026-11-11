@@ -13,8 +13,10 @@ usage (standalone): python rl/evaluate.py CKPT OUT [--device cpu] [--games smb] 
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import sys
+import uuid
 
 import numpy as np
 import torch
@@ -138,10 +140,32 @@ if __name__ == '__main__':
     if a.threads:
         torch.set_num_threads(a.threads)
     dev = torch.device(a.device)
+    checkpoint_sha256 = hashlib.sha256(Path(a.ckpt).read_bytes()).hexdigest()
     s = torch.load(a.ckpt, map_location=dev, weights_only=False)
     m = Policy(core=s['cfg']['core'], moods=s['cfg'].get('moods', 0)).to(dev)
     m.load_state_dict(s['model'])
     amp = torch.bfloat16 if dev.type == 'cuda' else torch.float32
-    for r in evaluate(m, dev, a.out, a.steps, amp_dtype=amp, games=a.games.split(',') if a.games else None,
-                      video_dir=a.video_dir, tag=a.tag):
+    results = evaluate(m, dev, a.out, a.steps, amp_dtype=amp, games=a.games.split(',') if a.games else None,
+                       video_dir=a.video_dir, tag=a.tag)
+    for r in results:
         print(r, flush=True)
+    if hashlib.sha256(Path(a.ckpt).read_bytes()).hexdigest() != checkpoint_sha256:
+        raise RuntimeError('checkpoint changed during evaluation; no policy proof was written')
+    out = Path(a.out)
+    inputs = []
+    for result in results:
+        name = result['game'] + (f"_mood{result['mood']}" if 'mood' in result else '')
+        pads = out / f'{name}.pads.bin'
+        item = {'game': result['game'], 'path': pads.name,
+                'sha256': hashlib.sha256(pads.read_bytes()).hexdigest(),
+                # Native trace frame zero is the post-boot reset, before these
+                # neutral frames. Keep them in the aligned trace input stream.
+                'boot_frames': len(boot_pads(result['game'])), 'neutral_frames': 4}
+        if 'mood' in result:
+            item['mood'] = result['mood']
+        inputs.append(item)
+    proof = {'controller': 'trained-policy', 'evaluation_id': uuid.uuid4().hex,
+             'checkpoint_sha256': checkpoint_sha256,
+             'summary': {'path': 'summary.json', 'sha256': hashlib.sha256((out / 'summary.json').read_bytes()).hexdigest()},
+             'inputs': inputs}
+    (out / 'evaluation-proof.json').write_text(json.dumps(proof, indent=2))

@@ -242,6 +242,11 @@ def ready_gate_ledger(tmp_path, evidence):
         if stage == 'verify':
             cli.cmd_set(SimpleNamespace(reference_root=str(tmp_path / 'reference'), slug='game',
                                         stage=stage, status='passed', evidence=str(contract_path), note=None))
+        elif stage == 'explore':
+            training_path = make_training_evidence(tmp_path)
+            capture_training_evidence(training_path, led.path.parent / 'evidence/oracle')
+            cli.cmd_set(SimpleNamespace(reference_root=str(tmp_path / 'reference'), slug='game',
+                                        stage=stage, status='passed', evidence=str(training_path), note=None))
         else:
             led.set(stage, 'passed', 'measured evidence')
     oracle_log = led.path.parent / 'evidence/oracle/session/trace.jsonl'
@@ -494,8 +499,7 @@ def test_noncharacter_game_can_complete_without_enemy_or_life_fields(evidence):
     assert len(report['routes']) == 2
 
 
-@pytest.fixture
-def training_evidence(tmp_path):
+def make_training_evidence(tmp_path, game='game'):
     from compare import sha256
     checkpoint = tmp_path / 'policy.pt'
     checkpoint.write_bytes(b'test-trained-checkpoint')
@@ -504,18 +508,43 @@ def training_evidence(tmp_path):
         trace = tmp_path / f'policy-play-{i}.jsonl'
         write_rows(trace, [
             {'f': f, 'level': 'one' if f < 2 else 'two', 'buttons': [] if f == 0 else [button],
-             'terminal': int(f == 3)}
+             'terminal': int(f == 3), 'lives': 3, 'game_over': 0,
+             'player_x': f * 2, 'player_y': 0, 'enemy_x': 10 + f, 'enemy_y': 4,
+             'enemy_mode': 0, 'score': f * 10, 'power_active': 0}
             for f in range(4)
         ])
-        manifest['plays'].append({'controller': 'trained-policy', 'trace': trace.name})
+        pads = tmp_path / f'policy-play-{i}.pads.bin'
+        pads.write_bytes(bytes([0, 0]) + bytes([128 if button == 'RIGHT' else 64]) * 3)
+        summary = tmp_path / f'policy-play-{i}.summary.json'
+        summary.write_text(json.dumps([{'game':game, 'end':'won', 'deaths':0, 'level':1}]))
+        receipt = tmp_path / f'policy-play-{i}.evaluation.json'
+        receipt.write_text(json.dumps({'controller':'trained-policy', 'evaluation_id':f'evaluation-{i}',
+            'checkpoint_sha256':sha256(checkpoint),
+            'summary':{'path':summary.name,'sha256':sha256(summary)},
+            'inputs':[{'game':game,'path':pads.name,'sha256':sha256(pads),'boot_frames':2}]}))
+        manifest['plays'].append({'controller': 'trained-policy', 'trace': trace.name,
+                                 'evaluation':receipt.name, 'game':game, 'boot_frames':2})
     path = tmp_path / 'training-evaluation.json'
     path.write_text(json.dumps(manifest))
     return path
 
 
+def capture_training_evidence(path, oracle_root):
+    log = oracle_root / 'policy-session/trace.jsonl'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    manifest = json.loads(path.read_text())
+    write_rows(log, [row for play in manifest['plays'] for row in read_rows(path.parent / play['trace'])])
+
+
+@pytest.fixture
+def training_evidence(tmp_path):
+    return make_training_evidence(tmp_path)
+
+
 def test_training_requires_two_complete_trained_policy_plays(training_evidence):
     report = completion.training(training_evidence, {'levels': ['one', 'two']})
-    assert report == {'complete': True, 'problems': [], 'plays': 2}
+    assert report['complete'] and report['problems'] == [] and report['plays'] == 2
+    assert report['proof']['manifest_sha256'] == sha256(training_evidence)
 
 
 @pytest.mark.parametrize('controller', ['search', 'replay'])
@@ -583,6 +612,7 @@ def test_explore_stage_refuses_search_then_accepts_completed_policy_evaluations(
         cli.cmd_set(args)
     assert led.read()['stages']['explore']['status'] == 'pending'
     training_evidence.write_text(valid)
+    capture_training_evidence(training_evidence, led.path.parent / 'evidence/oracle')
     assert cli.cmd_set(args)['status'] == 'passed'
     assert led.read()['stages']['explore']['evidence'] == str(training_evidence)
 

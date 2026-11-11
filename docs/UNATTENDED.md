@@ -35,3 +35,13 @@ The `visual-upgrade` skill creates its default mesh kit with procedural Three.js
 ## Recreation continues until verified
 
 The builder repeats observe, compare, diagnose, fix and full-route regression checks. The parent reviews `evidence/recreation-status.md` and resumes incomplete builder work across delegation/context limits. Local fixture passes do not authorize the 3D stage. Completion requires full requested-route coverage, fresh held-out runs, no known material deterministic mismatch, and separate evidence for uncontrolled randomness. A user time or spending limit still ends the run as incomplete when those requirements are unmet.
+
+## Automatic learning feedback
+
+Successful training starts and validated-fix restarts enable a one-minute watcher automatically. It preserves the initiating session when notifying the agent. Desktop/TUI/gateway sessions also require the host's explicit injection opt-in:
+
+```bash
+hermes config set plugins.entries.ghostrun.allow_gateway_injection true
+```
+
+This enables delivery to the same agent chat, not command approval bypass. An intentional `ghostrun_train_stop` cancels its watcher before waiting for shutdown. Re-enable monitoring explicitly after a failed stop only if continuing training is intended. A learning-failure alert requests behavioural diagnosis; it does not authorize changing shared reward weights without evidence.

@@ -3,6 +3,7 @@
 Needs: Hermes with this plugin linked and enabled, its settings pointing reference_root and builder_root at
 TESTDIR/ref and TESTDIR/bld, and a runtime Python with stable-retro, numpy, Pillow, torch and pytest.
 Uses a cartridge generated here, so no game file is needed. Runs on the CPU; compiles the CPU emulator.
+Set plugins.entries.ghostrun.allow_gateway_injection=true in the isolated test profile for the routing check.
 
 usage (from the Hermes checkout): scripts/run-in-hermes-env python3 tests/integration/hermes_itest.py TESTDIR RUNTIME_PYTHON
 """
@@ -21,7 +22,7 @@ def tool(name,args,task):
     try: return json.loads(out)
     except Exception: return {'raw':out}
 names=[n for n in registry.get_all_tool_names() if n.startswith('ghostrun_')]
-check('real registry has 29 tools',len(names)==29,names)
+check('real registry has 30 tools',len(names)==30,names)
 R='ref1'; B='bld1'; ref=T/'ref'; 
 r=tool('ghostrun_status',{'slug':'none'},'x'); check('status of unknown game returns error',('error' in r),r)
 rom=T/'t.nes'; subprocess.run([sys.executable,P/'tests/fixtures/make_test_rom.py',rom],check=True)
@@ -42,6 +43,7 @@ out=get_plugin_command_handler('ghostrun')('tg'); check('/ghostrun command','rew
 for s in ('pipeline','reward-discovery','gpu-env-port','training-doctor','rebuild-from-oracle','visual-upgrade'):
     r=tool('skill_view',{'name':f'ghostrun:{s}'},R); check(f'skill {s}',r.get('success') and len(r.get('content',''))>300,r)
 r=tool('ghostrun_recreation_check',{'slug':'tg','manifest':str(T/'missing.json')},R); check('completion rejects missing evidence','error' in r,r)
+r=tool('ghostrun_policy_check',{'slug':'tg','manifest':str(T/'missing-policy.json')},R); check('policy check rejects missing evidence','error' in r,r)
 # oracle and builder
 r=tool('ghostrun_oracle_start',{'slug':'tg'},'unassigned'); check('hook blocks oracle_start for unassigned','reference sessions' in json.dumps(r),r)
 r=tool('ghostrun_oracle_start',{'slug':'tg'},R); check('oracle_start',r.get('started'),r)
@@ -89,6 +91,7 @@ else:
     print('SKIP live busy-GPU refusal: no competing GPU job (unit test covers refusal)',flush=True)
 CPU='--device cpu --envs-per-game 1 --steps 8 --minibatch-envs 4 --epochs 1 --eval-every-minutes 0 --total-iters 3'
 r=tool('ghostrun_train_start',{'slug':'tg','args':CPU},R); check('train_start real CPU run',r.get('pid'),r); run=Path(r.get('run','/x'))
+check('train_start automatically enabled watcher',r.get('watcher',{}).get('watching')=='tg',r)
 for _ in range(400):
     if (run/'metrics.jsonl').exists() and len((run/'metrics.jsonl').read_text().splitlines())>=3: break
     if (run/'stdout.log').exists() and 'Traceback' in (run/'stdout.log').read_text(): break
@@ -102,6 +105,7 @@ for _ in range(120):
     time.sleep(1)
 r=tool('ghostrun_train_check',{'slug':'tg'},R); check('train_check after clean finish',r.get('iteration') is not None and 'trainer_stopped' not in json.dumps(r),r)
 # watcher wakes agent through the real inject path
+r=tool('ghostrun_watch_stop',{'slug':'tg'},R); check('automatic watcher stopped for fast injection test',r.get('stopped'),r)
 mgr=get_plugin_manager()
 class Cli: _agent_running=False; _pending_input=queue.Queue(); _interrupt_queue=queue.Queue()
 mgr._cli_ref=Cli
@@ -113,6 +117,19 @@ for _ in range(60):
     except queue.Empty: pass
 check('watcher injected wake message',msg and 'training-doctor' in msg and 'non_finite' in msg,msg)
 r=tool('ghostrun_watch_stop',{'slug':'tg'},R); check('watch_stop',r.get('stopped'),r); mgr._cli_ref=None
+# Exercise the real host's keyed background route, without the classic CLI shortcut.
+from gateway.session_context import scoped_session_key
+owner=object(); delivered=queue.Queue()
+mgr.set_gateway_message_injector(owner,lambda **kw: delivered.put(kw) or True)
+try:
+    with scoped_session_key('feedback-origin'):
+        tool('ghostrun_watch_start',{'slug':'tg','minutes':0.001},R)
+    try: routed=delivered.get(timeout=5)
+    except queue.Empty: routed={}
+    check('background watcher retains originating gateway session',routed.get('session_key')=='feedback-origin',routed)
+finally:
+    tool('ghostrun_watch_stop',{'slug':'tg'},R)
+    mgr.clear_gateway_message_injector(owner)
 # fix loop
 r=tool('ghostrun_fix_validate',{'slug':'tg'},R); check('validate refused with no open fix','no open fix' in json.dumps(r),r)
 r=tool('ghostrun_fix_begin',{'slug':'tg','finding':'non_finite','hypothesis':'wrap at 255'},R); check('fix_begin',r.get('open'),r)

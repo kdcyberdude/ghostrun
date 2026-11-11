@@ -113,6 +113,9 @@ def test_wake_message_only_on_new_action(ctx, tmp_path):
     class Stop:
         n = 0
 
+        def is_set(self):
+            return False
+
         def wait(self, _):
             Stop.n += 1
             return Stop.n > 3
@@ -179,8 +182,75 @@ def test_watcher_retries_a_wake_that_was_not_delivered(ctx):
     ctx.inject_message = lambda *a, **k: attempts.append(a[0]) or len(attempts) > 1
     class Stop:
         n = 0
+        def is_set(self):
+            return False
         def wait(self, _):
             self.n += 1
             return self.n > 3
     plugin.watch_loop('g', 1, Stop())
     assert len(attempts) == 2
+
+
+def test_training_stop_cancels_monitor_before_waiting_for_process(ctx):
+    import threading
+    plugin = load().Plugin(ctx)
+    stop = threading.Event()
+    plugin.watchers['g'] = stop
+    def stopping(*args, **kwargs):
+        assert stop.is_set() and 'g' not in plugin.watchers
+        return json.dumps({'error': 'trainer has not stopped yet'})
+    plugin.run_cli = stopping
+    result = json.loads(plugin.cli_handler('train-stop', {})({'slug': 'g'}))
+    assert 'has not stopped' in result['error'] and not plugin.watchers
+
+
+def test_watcher_keeps_starting_session_and_context(ctx, monkeypatch):
+    import contextvars
+    import sys
+    import threading
+    import types
+    route = contextvars.ContextVar('watch-route', default='unbound')
+    package = types.ModuleType('hermes_cli')
+    package.__path__ = []
+    helper = types.ModuleType('hermes_cli.plugin_session')
+    helper.session_key = lambda: route.get()
+    monkeypatch.setitem(sys.modules, 'hermes_cli', package)
+    monkeypatch.setitem(sys.modules, 'hermes_cli.plugin_session', helper)
+    plugin = load().Plugin(ctx)
+    plugin.run_cli = lambda *a, **k: json.dumps({'verdict':'act', 'findings':[
+        {'code':'early_learning_failure','severity':'act','evidence':'failed','next_step':'inspect'}]})
+    received, done = [], threading.Event()
+    def inject(content, role='user', **kwargs):
+        received.append((kwargs.get('session_key'), route.get()))
+        done.set()
+        return True
+    ctx.inject_message = inject
+    token = route.set('starting-chat')
+    try:
+        plugin.watch_start({'slug':'g','minutes':0.0001})
+        route.set('different-chat')
+        assert done.wait(2)
+        assert received == [('starting-chat','starting-chat')]
+    finally:
+        plugin.watch_stop({'slug':'g'})
+        route.reset(token)
+
+
+@pytest.mark.parametrize('minutes',[0,-1,float('nan'),float('inf')])
+def test_invalid_watcher_interval_does_not_start_a_thread(ctx,minutes):
+    plugin = load().Plugin(ctx)
+    assert 'error' in json.loads(plugin.watch_start({'slug':'g','minutes':minutes}))
+    assert not plugin.watchers
+
+
+def test_stop_during_health_check_prevents_late_wake(ctx):
+    import threading
+    plugin = load().Plugin(ctx)
+    stop = threading.Event()
+    def late_report(*args, **kwargs):
+        stop.set()
+        return json.dumps({'verdict':'act', 'findings':[
+            {'code':'early_learning_failure','severity':'act','evidence':'old','next_step':'inspect'}]})
+    plugin.run_cli = late_report
+    plugin.watch_loop('g',0,stop)
+    assert not ctx.injected

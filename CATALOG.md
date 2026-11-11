@@ -2,7 +2,7 @@
 
 Disclosure for the Hermes plugin catalog (rule 13).
 
-**Surfaces:** 29 tools, one `pre_tool_call` hook, one `/ghostrun` command, six skills. No middleware, no credentials, no telemetry.
+**Surfaces:** 30 tools, one `pre_tool_call` hook, one `/ghostrun` command, six skills. No middleware, no credentials, no telemetry.
 
 **Network:** one call, only when you run `ghostrun_engine_setup`: `git clone https://github.com/hbofz/NeSLE.git`, checked out at pinned commit `0b04d8b9`, into the plugin's data folder. The plugin never replaces its own files.
 

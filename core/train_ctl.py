@@ -186,6 +186,17 @@ def start(ref, slug, python, args, share_gpu=False):
     if state['version'] == 0:
         state['version'] = 1
         snapshot(game, 1, {'reason': 'first reward'})
+    elif list(args) != state['args'] and state['run']:
+        checkpoint = Path(state['run']) / 'ckpt_rank0_latest.pt'
+        if checkpoint.exists():
+            model, key = best_model(state['run'])
+            reason = {'reason': 'training configuration changed', 'previous_args': state['args'], 'args': list(args)}
+            state['history'].append({'version': state['version'], 'run': state['run'],
+                                     'best_model': str(model) if model else None, 'best': key, **reason})
+            state['version'] += 1
+            snapshot(game, state['version'], reason)
+            return {**launch(game, state, python, args, restart_from=checkpoint),
+                    'restarted_from': str(checkpoint), 'reason': reason['reason']}
     return launch(game, state, python, args)
 
 

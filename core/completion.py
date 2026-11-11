@@ -149,31 +149,133 @@ def delivery(manifest_path, contract=None, three_d=True):
     return {**report, 'complete': not problems}
 
 
-def training(manifest_path, contract):
-    """Require repeated completed policy evaluations, not a search route relabelled as training."""
+def _recorded_episodes(oracle_root, keys):
+    episodes = []
+    for log in Path(oracle_root).rglob('trace.jsonl'):
+        episode = []
+        for line in log.read_text().splitlines():
+            row = json.loads(line)
+            if row.get('f') == 0:
+                if episode:
+                    episodes.append(episode)
+                episode = []
+            episode.append({k: row[k] for k in keys if k in row})
+        if episode:
+            episodes.append(episode)
+    return episodes
+
+
+def training(manifest_path, contract, game=None, require_win=True, oracle_root=None):
+    """Validate recorded policy evidence; losing trajectories are provisional only."""
     path = Path(manifest_path).resolve()
     manifest = json.loads(path.read_text())
     checkpoint = path.parent / manifest['checkpoint']
-    problems = []
+    problems, artifacts = [], {}
+    checkpoint_hash = None
     if not checkpoint.is_file() or not checkpoint.stat().st_size:
         problems.append('missing trained checkpoint')
-    elif manifest.get('checkpoint_sha256') != sha256(checkpoint):
-        problems.append('trained checkpoint hash mismatch')
+    else:
+        checkpoint_hash = sha256(checkpoint)
+        artifacts[str(checkpoint.resolve())] = checkpoint_hash
+        if manifest.get('checkpoint_sha256') != checkpoint_hash:
+            problems.append('trained checkpoint hash mismatch')
     plays = manifest.get('plays', [])
-    if len(plays) < 2:
-        problems.append('need at least two completed trained-policy evaluations')
+    minimum = 2 if require_win else 1
+    if len(plays) < minimum:
+        problems.append('need at least two completed trained-policy evaluations' if require_win else
+                        'need an authentic trained-policy evaluation')
+    no_life_loss = require_win and contract.get('training', {}).get('no_life_loss') is True
+    fields = {k for group in contract.get('fields', {}).values() for k in group}
+    # Include acceptance measurements even when the comparison contract omits them.
+    keys = sorted(fields | {'f', 'buttons', 'level', 'lives', 'terminal', 'game_over'})
+    episodes = _recorded_episodes(oracle_root, keys) if oracle_root is not None else None
+    evaluations = set()
     for play in plays:
-        rows = load(path.parent / play['trace'])
+        trace = path.parent / play['trace']
+        rows = load(trace)
+        artifacts[str(trace.resolve())] = sha256(trace)
         if play.get('controller') != 'trained-policy' or not rows or sorted(rows) != list(range(len(rows))):
             problems.append('evaluation must be a contiguous trained-policy play from reset')
-        if not rows or rows[max(rows)].get('terminal') != 1:
+        if require_win and (not rows or rows[max(rows)].get('terminal') != 1):
             problems.append('trained policy did not reach the requested ending')
         observed = {str(row['level']) for row in rows.values() if 'level' in row}
-        if not set(map(str, contract['levels'])) <= observed:
+        if require_win and not set(map(str, contract['levels'])) <= observed:
             problems.append('trained policy did not visit every declared level/rule regime')
         if any(not isinstance(row.get('buttons'), list) for row in rows.values()):
             problems.append('evaluation is missing applied policy inputs')
-    return {'complete': not problems, 'problems': problems, 'plays': len(plays)}
+        ordered = [rows[f] for f in sorted(rows)]
+        if episodes is not None:
+            captured = [{k: row[k] for k in keys if k in row} for row in ordered]
+            if any(not fields <= row.keys() for row in ordered) or not any(
+                    captured == episode[:len(captured)] for episode in episodes):
+                problems.append('policy trace is not a recorded private oracle playthrough')
+        if require_win and any(row.get('game_over') for row in ordered):
+            problems.append('winning evaluation includes game over')
+        if no_life_loss:
+            lives = [row.get('lives') for row in ordered]
+            has_lives = any('lives' in group for group in contract.get('fields', {}).values())
+            if has_lives or any(value is not None for value in lives):
+                if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in lives):
+                    problems.append('no-life-loss proof needs valid lives on every frame')
+                elif any(b < a for a, b in zip(lives, lives[1:])):
+                    problems.append('trained policy lost a life')
+        try:
+            receipt_path = path.parent / play['evaluation']
+            receipt = json.loads(receipt_path.read_text())
+            artifacts[str(receipt_path.resolve())] = sha256(receipt_path)
+            identity = receipt['evaluation_id']
+            if not isinstance(identity, str) or not identity or identity in evaluations:
+                raise ValueError('need separately recorded policy evaluations')
+            evaluations.add(identity)
+            if receipt.get('controller') != 'trained-policy' or receipt.get('checkpoint_sha256') != checkpoint_hash:
+                raise ValueError('evaluation did not use the accepted trained checkpoint')
+            summary = receipt_path.parent / receipt['summary']['path']
+            summary_hash = sha256(summary)
+            artifacts[str(summary.resolve())] = summary_hash
+            if summary_hash != receipt['summary']['sha256']:
+                raise ValueError('evaluation summary hash mismatch')
+            expected_game = game or play.get('game')
+            if not expected_game or play.get('game') != expected_game:
+                raise ValueError('evaluation game differs from the requested game')
+            records = [r for r in json.loads(summary.read_text()) if r.get('game') == expected_game and
+                       r.get('mood') == play.get('mood')]
+            inputs = [r for r in receipt['inputs'] if r.get('game') == expected_game and
+                      r.get('mood') == play.get('mood')]
+            if len(records) != 1 or len(inputs) != 1:
+                raise ValueError('evaluation must identify one game/controller result')
+            result, source = records[0], inputs[0]
+            if type(result.get('deaths')) is not int or result['deaths'] < 0:
+                raise ValueError('evaluation is missing valid death accounting')
+            if require_win and result.get('end') != 'won':
+                raise ValueError('trained policy evaluation did not win')
+            if no_life_loss and result.get('deaths') != 0:
+                raise ValueError('trained policy evaluation lost a life')
+            pads_path = receipt_path.parent / source['path']
+            pads = pads_path.read_bytes()
+            artifacts[str(pads_path.resolve())] = sha256(pads_path)
+            if artifacts[str(pads_path.resolve())] != source['sha256']:
+                raise ValueError('recorded policy input hash mismatch')
+            offset = play['boot_frames']
+            if type(offset) is not int or offset < 0 or offset != source['boot_frames']:
+                raise ValueError('policy boot/input alignment is unverified')
+            frames = len(ordered) - 1
+            if len(pads) < offset + frames or (require_win and len(pads) != offset + frames):
+                raise ValueError('policy input recording does not cover the trace')
+            buttons = ('A', 'B', 'SELECT', 'START', 'UP', 'DOWN', 'LEFT', 'RIGHT')
+            if not ordered or ordered[0].get('buttons') != []:
+                raise ValueError('policy trace must start at reset before applying inputs')
+            for f, row in enumerate(ordered[1:], 1):
+                applied = row.get('buttons')
+                if not isinstance(applied, list) or any(b not in buttons for b in applied):
+                    raise ValueError('policy trace contains invalid applied inputs')
+                mask = sum(1 << buttons.index(b) for b in set(applied))
+                if mask != pads[offset + f - 1]:
+                    raise ValueError('trace inputs differ from the trained policy recording')
+        except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
+            problems.append(f'invalid trained-policy evaluation evidence: {exc}')
+    return {'complete': not problems, 'problems': problems, 'plays': len(plays),
+            'proof': {'manifest_sha256': sha256(path), 'checkpoint_sha256': checkpoint_hash,
+                      'artifacts': artifacts}}
 
 
 def verify_reference(manifest_path, contract, oracle_root):
@@ -184,18 +286,7 @@ def verify_reference(manifest_path, contract, oracle_root):
     keys = ['f', 'buttons', *fields]
     def canonical(row):
         return {k: row[k] for k in keys if k in row}
-    episodes = []
-    for log in Path(oracle_root).rglob('trace.jsonl'):
-        episode = []
-        for line in log.read_text().splitlines():
-            row = json.loads(line)
-            if row.get('f') == 0:
-                if episode:
-                    episodes.append(episode)
-                episode = []
-            episode.append(canonical(row))
-        if episode:
-            episodes.append(episode)
+    episodes = _recorded_episodes(oracle_root, keys)
     problems = []
     for route in manifest.get('routes', []):
         matches = []

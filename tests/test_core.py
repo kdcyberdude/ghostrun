@@ -276,3 +276,17 @@ def test_oracle_reset_exposes_boot_alignment_without_shifting_gameplay_frame(tmp
     backend.boot_frames = 613
     reply = Oracle(backend, tmp_path).handle({'op': 'reset'})
     assert reply['boot_frames'] == 613 and reply['frame'] == 0
+
+
+def test_numeric_tolerance_shorthand_keeps_zero_exact(tmp_path):
+    import argparse, cli
+    limits = tmp_path / 'tolerances.json'
+    limits.write_text('{"x":0}')
+    bounds = cli.read_tolerances(argparse.Namespace(tolerances=str(limits)))
+    assert bounds == {'x': {'near':0, 'far':0}}
+    a=write(tmp_path/'native',[{'f':0,'x':0},{'f':1,'x':1}])
+    b=write(tmp_path/'replica',[{'f':0,'x':0},{'f':1,'x':2}])
+    assert compare(a,b,bounds)['first_divergence']['frame'] == 1
+    limits.write_text('{"x":-1}')
+    with pytest.raises(LedgerError):
+        cli.read_tolerances(argparse.Namespace(tolerances=str(limits)))

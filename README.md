@@ -66,7 +66,7 @@ Training needs an NVIDIA GPU with CUDA and a Python with [`requirements-runtime.
 
 ## Use it
 
-New runs default to independent recreation of the observed levels and mechanics, followed by 3D and recordings. See [the recreation workflow and completion evidence](docs/RECREATION.md). A measured full-route completion check is separate from the regression gate.
+New runs use two parallel branches: improve the learned player, and provisionally recreate the observed scenes from that player’s actual inputs. A losing policy is valid provisional data; final completion requires successful learned coverage and matching independent gameplay. Requested 3D and recordings follow verified 2D. See [the recreation workflow and completion evidence](docs/RECREATION.md). A measured full-route completion check is separate from the regression gate.
 
 Give Hermes a game ROM and ask:
 

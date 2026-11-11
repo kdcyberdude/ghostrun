@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from contextvars import copy_context
+import math
 import os
 from pathlib import Path
 import signal
@@ -38,6 +40,12 @@ def number(description, **extra):
 
 # name: (command, description, properties, flag map). Flags map tool arguments to CLI options.
 REFERENCE_TOOLS = {
+    'ghostrun_policy_check': ('policy-check', 'Validate and publish authentic trained-policy decisions for provisional recreation. '
+                              'A losing evaluation is valid provisional data. final=true checks successful learned coverage; '
+                              'provisional validity never means recreation is complete.',
+                              dict(slug=SLUG, manifest=text('Path to evaluation manifest with checkpoint and native input evidence.'),
+                                   final={'type': 'boolean', 'description': 'Check final successful learning coverage.', 'default': False}),
+                              {'manifest': '--manifest', 'final': '--final'}),
     'ghostrun_init': ('init', 'Start a game: copy the ROM into the private reference folder and create its stage ledger. '
                       'Before the first call, load skill_view("ghostrun:pipeline") and follow it. '
                       'Default recreate preserves observed levels and mechanics using independent code and authored assets. '
@@ -88,7 +96,7 @@ SHARED_TOOLS = {
     'ghostrun_isolation_check': ('isolation', 'Check that the builder folder has no route to the reference.', dict(slug=SLUG), {}),
     'ghostrun_compare': ('compare', 'Compare a rebuild trace to a reference trace. Reports the first divergence.',
                          dict(slug=SLUG, reference=text('Reference trace.'), rebuild=text('Rebuild trace.'),
-                              tolerances=text('JSON tolerances file.')),
+                              tolerances=text('JSON fields mapped to {near,far} bounds or a strict numeric bound such as 0.')),
                          {'reference': '--reference', 'rebuild': '--rebuild', 'tolerances': '--tolerances'}),
     'ghostrun_gate': ('gate', 'Regression gate: PASS, REGRESSION or FAIL against the saved baseline.',
                       dict(slug=SLUG, reference=text('Reference trace.'), rebuild=text('Rebuild trace.'),
@@ -156,6 +164,8 @@ class Plugin:
     def cli_handler(self, command, flags):
         def handler(args, **_):
             try:
+                if command == 'train-stop':
+                    self.watch_stop({'slug': args['slug']})
                 reply = self.run_cli(build_argv(command, flags, args))
                 if command in ('train-start', 'fix-apply'):
                     result = json.loads(reply)
@@ -178,13 +188,21 @@ class Plugin:
             return json.dumps({'error': 'start a fresh builder session: changing folders cannot erase reference context'})
         root = Path(self.builder_root()) / args['slug']
         info = root / '.oracle.json'
-        if info.exists() and json.loads(info.read_text()).get('mode') == 'recreate':
+        private_state = Path(self.reference_root()) / args['slug'] / 'state.json'
+        mode = json.loads(private_state.read_text()).get('mode') if private_state.exists() else (json.loads(info.read_text()).get('mode') if info.exists() else None)
+        if mode == 'recreate':
             sys.path.insert(0, str(HERE / 'core'))
             from prepared_assets import validate_assets
             try:
                 validate_assets(root / 'assets')
             except (OSError, ValueError, KeyError, TypeError) as e:
                 return json.dumps({'error': f'prepare assets before building: {e}'})
+            if private_state.exists():
+                readiness = json.loads(self.run_cli(['policy-readiness', args['slug']]))
+                if not readiness.get('valid'):
+                    return json.dumps({'error': 'genuine trained-policy data is not ready; parent must publish it with ghostrun_policy_check. '
+                                       'A losing policy is allowed; a win is not required for provisional building.',
+                                       'problems': readiness.get('problems', [readiness.get('error', 'unverified evidence')])})
             try:
                 self.oracle_hello(args['slug'], timeout=2)
             except (OSError, RuntimeError, ValueError, KeyError) as e:
@@ -287,11 +305,20 @@ class Plugin:
         return json.dumps(reply)
 
     def watch_start(self, args, **_):
-        slug, minutes = args['slug'], float(args.get('minutes') or 1)
+        slug = args['slug']
+        minutes = float(args['minutes']) if args.get('minutes') is not None else 1
+        if not math.isfinite(minutes) or minutes <= 0:
+            return json.dumps({'error': 'watch interval must be positive and finite'})
         if slug in self.watchers:
             return json.dumps({'running': True})
+        try:
+            from hermes_cli.plugin_session import session_key
+            key = session_key() or None
+        except ImportError:
+            key = None
         stop = threading.Event()
-        thread = threading.Thread(target=self.watch_loop, args=(slug, minutes, stop), daemon=True, name=f'{PLUGIN}-{slug}')
+        context = copy_context()
+        thread = threading.Thread(target=context.run, args=(self.watch_loop, slug, minutes, stop, key), daemon=True, name=f'{PLUGIN}-{slug}')
         self.watchers[slug] = stop
         thread.start()
         return json.dumps({'watching': slug, 'every_minutes': minutes})
@@ -302,7 +329,7 @@ class Plugin:
             stop.set()
         return json.dumps({'stopped': bool(stop)})
 
-    def watch_loop(self, slug, minutes, stop):
+    def watch_loop(self, slug, minutes, stop, session_key=None):
         """Plain arithmetic until something is wrong, so a healthy run costs no tokens."""
         last = None
         while not stop.wait(minutes * 60):
@@ -310,9 +337,12 @@ class Plugin:
                 report = json.loads(self.run_cli(['watch', slug], timeout=300))
             except ValueError:
                 continue
+            if stop.is_set():
+                return
             codes = sorted(f['code'] for f in report.get('findings', []) if f['severity'] == 'act')
             if report.get('verdict') == 'act' and codes != last and not report.get('pending_fix'):
-                if self.ctx.inject_message(wake_message(slug, report), role='system'):
+                target = {'session_key': session_key} if session_key else {}
+                if self.ctx.inject_message(wake_message(slug, report), role='system', **target):
                     last = codes
             elif report.get('verdict') != 'act':
                 last = codes
@@ -352,6 +382,7 @@ class Plugin:
 def wake_message(slug, report):
     items = '\n'.join(f"- {f['code']}: {f['evidence']}. {f['next_step']}" for f in report['findings'] if f['severity'] == 'act')
     return (f'GhostRun training watcher, game {slug}, iteration {report.get("iteration")}, needs action.\n{items}\n'
+            'Before repairing, confirm training is still active; do not restart an intentionally stopped run.\n'
             f'Load skill_view("{PLUGIN}:training-doctor") and follow it. Fixes used: {report.get("fixes_used")} of {report.get("fix_budget")}.')
 
 

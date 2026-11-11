@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -96,6 +97,7 @@ def cmd_status(a):
 
 
 def cmd_set(a):
+    training_proof = None
     if a.status == 'passed' and a.stage == 'verify' and ledger(a).read()['mode'] == 'recreate':
         contract = json.loads(Path(a.evidence).read_text())
         completion.validate_contract(contract)
@@ -104,7 +106,7 @@ def cmd_set(a):
             raise LedgerError('verify cannot pass before reward verification passes')
         if state.get('contract') and state['contract'] != contract:
             old = state['contract']
-            if not set(old['levels']) <= set(contract['levels']) or not set(old['cases']) <= set(contract['cases']) or any(
+            if (old.get('training', {}).get('no_life_loss') and not contract.get('training', {}).get('no_life_loss')) or not set(old['levels']) <= set(contract['levels']) or not set(old['cases']) <= set(contract['cases']) or any(
                     k not in contract['fields'].get(group, {}) or contract['fields'][group][k] > limit
                     for group, fields in old['fields'].items() for k, limit in fields.items()):
                 raise LedgerError('reference contract is pinned; do not shrink scope or loosen tolerances')
@@ -114,12 +116,17 @@ def cmd_set(a):
         state['contract'] = contract
         ledger(a)._write(state)
     if a.status == 'passed' and a.stage == 'explore' and ledger(a).read()['mode'] == 'recreate':
-        report = completion.training(a.evidence, ledger(a).read()['contract'])
+        report = completion.training(a.evidence, ledger(a).read()['contract'], game=a.slug,
+                                     oracle_root=ref_dir(a) / 'evidence' / 'oracle')
         if not report['complete']:
             raise LedgerError('policy training incomplete: ' + '; '.join(report['problems']))
+        training_proof = {'manifest': str(Path(a.evidence).resolve()), 'proof': report['proof']}
     if a.status == 'passed' and a.stage == 'assets':
         validate_assets(builder_dir(a) / 'assets')
     if a.status in ('passed', 'skipped') and ledger(a).read()['mode'] == 'recreate' and a.stage in ('gate', 'visual3d'):
+        learned = policy_readiness(a, final=True)
+        if not learned['valid']:
+            raise LedgerError('final learning coverage incomplete: ' + '; '.join(learned['problems']))
         contract = ledger(a).read().get('contract')
         if not contract:
             raise LedgerError('verify must pin the full-game reference contract first')
@@ -133,7 +140,40 @@ def cmd_set(a):
         if not report['complete']:
             raise LedgerError('recreation incomplete: ' + '; '.join(report['problems']))
     state = ledger(a).set(a.stage, a.status, a.evidence, a.note)
+    if training_proof is not None:
+        state['training_acceptance'] = training_proof
+        ledger(a)._write(state)
     return {'stage': a.stage, **state['stages'][a.stage]}
+
+
+def policy_readiness(a, final=False):
+    state = ledger(a).read()
+    pin = state.get('training_acceptance') if final else (state.get('policy_evidence') or state.get('training_acceptance'))
+    if not pin:
+        return {'valid': False, 'problems': ['no accepted learned-policy evidence; publish an actual recorded policy evaluation']}
+    try:
+        report = completion.training(pin['manifest'], state.get('contract') or {'levels': []}, game=a.slug, require_win=final,
+                                     oracle_root=ref_dir(a) / 'evidence' / 'oracle')
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return {'valid': False, 'problems': [f'learned-policy evidence is unavailable or invalid: {exc}']}
+    if report.get('proof') != pin.get('proof'):
+        report['problems'].append('learned-policy evidence changed since acceptance; revalidate it')
+    return {'valid': not report['problems'], 'problems': report['problems']}
+
+
+def cmd_policy_check(a):
+    state = ledger(a).read()
+    report = completion.training(a.manifest, state.get('contract') or {'levels': []}, game=a.slug, require_win=a.final,
+                                 oracle_root=ref_dir(a) / 'evidence' / 'oracle')
+    if report['complete']:
+        state['policy_evidence'] = {'manifest': str(Path(a.manifest).resolve()), 'proof': report['proof']}
+        ledger(a)._write(state)
+    return {**report, 'valid': report['complete'], 'acceptance': 'final-learning' if a.final else 'provisional-policy-data',
+            'note': 'Provisional validity permits a losing policy dataset; it is not learning or recreation completion.'}
+
+
+def cmd_policy_readiness(a):
+    return policy_readiness(a)
 
 
 def reward_env(a):
@@ -299,7 +339,17 @@ def cmd_fix_review(a):
 
 
 def read_tolerances(a):
-    return json.loads(Path(a.tolerances).read_text())
+    values = json.loads(Path(a.tolerances).read_text())
+    if not isinstance(values, dict) or not values:
+        raise LedgerError('tolerances must name the gameplay fields to compare')
+    result = {}
+    for field, value in values.items():
+        bounds = {'near': value, 'far': value} if type(value) in (int, float) else value
+        if not isinstance(bounds, dict) or any(type(bounds.get(k)) not in (int, float) or
+                                              not math.isfinite(bounds[k]) or bounds[k] < 0 for k in ('near', 'far')) or bounds['far'] < bounds['near']:
+            raise LedgerError(f'invalid comparison bounds for {field}')
+        result[field] = bounds
+    return result
 
 
 def cmd_compare(a):
@@ -345,6 +395,8 @@ def parser():
     add('init', cmd_init, ('--rom', dict(required=True)), ('--mode', dict(default='recreate')), ('--rights', {}))
     add('status', cmd_status)
     add('completion', cmd_completion, ('--manifest', dict(required=True)))
+    add('policy-check', cmd_policy_check, ('--manifest', dict(required=True)), ('--final', dict(action='store_true')))
+    add('policy-readiness', cmd_policy_readiness)
     add('set', cmd_set, ('stage', {}), ('status', {}), ('--evidence', {}), ('--note', {}))
     add('reward-check', cmd_reward_check)
     add('audit', cmd_audit, ('--episodes', dict(type=int, default=12)), ('--steps', dict(type=int, default=3000)))

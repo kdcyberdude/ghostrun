@@ -52,6 +52,31 @@ def test_start_refuses_busy_gpu(tmp_path, monkeypatch):
         tc.start(ref, 'g', 'python3', [])
 
 
+def test_changed_sampling_config_preserves_checkpoint_and_forks_without_reward_fix(tmp_path, monkeypatch):
+    ref, g = game(tmp_path)
+    run = g.run_dir(1)
+    run.mkdir(parents=True)
+    checkpoint = run / 'ckpt_rank0_latest.pt'
+    checkpoint.write_bytes(b'preserved latest weights')
+    state = g.state
+    state.update(version=1, run=str(run), args=['--envs-per-game', '128'])
+    g.save(state)
+    monkeypatch.setattr(tc, 'gpu_other_users', lambda *_: [])
+    launched = []
+    def launch(game, state, python, args, restart_from=None):
+        launched.append((state, args, restart_from))
+        return {'version': state['version']}
+    monkeypatch.setattr(tc, 'launch', launch)
+    assert tc.start(ref, 'g', 'python3', state['args'])['version'] == 1
+    assert launched[-1][2] is None
+    result = tc.start(ref, 'g', 'python3', ['--envs-per-game', '8192'])
+    fork = launched[-1][0]
+    assert result['version'] == 2 and launched[-1][2] == checkpoint
+    assert fork['fixes_used'] == 0 and fork['history'][0]['run'] == str(run)
+    assert checkpoint.read_bytes() == b'preserved latest weights'
+    assert (g.versions / 'v002' / 'g.py').exists()
+
+
 def write_eval(run, it, level, ret):
     d = run / 'eval' / f'it{it:06d}'
     d.mkdir(parents=True)

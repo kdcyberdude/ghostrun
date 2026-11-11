@@ -42,6 +42,8 @@ Episodes that end by game over, win, level skip or stall are terminal. A rollout
 
 Resume is exact: environments, RNG, optimizer, GRU state and counters. See [Reliability](RELIABILITY.md#exact-resume).
 
+Through the plugin, unchanged training arguments resume that state. Changed arguments fork a checkpointed run into a new version using its latest weights and fresh environment/optimizer state, preserving the previous run. Keep the model architecture compatible with those weights. This allows measured sampling changes without pretending they are reward fixes.
+
 ## Exploration
 
 Three mechanisms, all off by default and switched on per run.
