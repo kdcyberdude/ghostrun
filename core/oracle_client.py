@@ -4,9 +4,14 @@ import socket
 
 
 class OracleClient:
-    def __init__(self, sock_path):
+    def __init__(self, sock_path, timeout=30):
         self.s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.s.connect(str(sock_path))
+        self.s.settimeout(timeout)
+        try:
+            self.s.connect(str(sock_path))
+        except OSError:
+            self.s.close()
+            raise
         self.f = self.s.makefile('rw', encoding='utf-8', newline='\n')
 
     def call(self, op, **fields):

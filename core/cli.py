@@ -45,8 +45,17 @@ def ledger(a):
 
 def socket_path(a):
     """Short and outside both roots: Unix socket paths are limited to about 100 characters."""
+    pin = ref_dir(a) / 'oracle-endpoint.json'
+    if pin.exists():
+        return Path(json.loads(pin.read_text())['socket'])
     key = hashlib.sha256(str(ref_dir(a).resolve()).encode()).hexdigest()[:12]
     return Path(tempfile.gettempdir()) / f'oracle-{key}.sock'
+
+
+def publish_socket(a, mode):
+    info = {'socket': str(socket_path(a)), 'mode': mode}
+    (ref_dir(a) / 'oracle-endpoint.json').write_text(json.dumps(info))
+    (builder_dir(a) / '.oracle.json').write_text(json.dumps(info))
 
 
 def cmd_init(a):
@@ -68,12 +77,13 @@ def cmd_init(a):
     if not module.exists():
         module.write_text((CORE / 'templates' / 'game_module.py').read_text().replace('<sha256>', digest))
     shutil.copyfile(CORE / 'oracle_client.py', build / 'tools' / 'oracle_client.py')
-    (build / '.oracle.json').write_text(json.dumps({'socket': str(socket_path(a)), 'mode': a.mode}))
+    publish_socket(a, a.mode)
     led = ledger(a)
     led.create(a.slug, a.mode, rights)
     led.set('intake', 'passed', f'rom sha256 {digest}')
     return {'slug': a.slug, 'mode': a.mode, 'rom_sha256': digest, 'module': str(module), 'builder': str(build),
-            'read_first': [str(REWARD10 / 'README.md'), str(module)], 'next': led.next_stage()}
+            'read_first': [str(CORE.parent / 'docs' / 'RECREATION.md'), str(REWARD10 / 'README.md'), str(module)],
+            'next': led.next_stage()}
 
 
 def cmd_status(a):
@@ -155,11 +165,23 @@ def cmd_search(a):
 
 
 def route_decisions(game, result_path):
-    """Expand a search result's action indices into (buttons, frames) decisions."""
+    """Use recorded policy inputs directly, or expand a legacy search route."""
+    from oracle import BUTTONS, MAX_FRAMES
+    route = json.loads(Path(result_path).read_text())
     decisions = []
-    for i in json.loads(Path(result_path).read_text())['acts']:
-        act = game.ACTIONS[i]
-        decisions += [(list(b), f) for b, f in act] if isinstance(act, list) else [(list(act), 8)]
+    if 'decisions' in route:
+        decisions = [(row['buttons'], row['frames']) for row in route['decisions']]
+    else:
+        for i in route['acts']:
+            if type(i) is not int or not 0 <= i < len(game.ACTIONS):
+                raise LedgerError('route action index is outside the game action set')
+            act = game.ACTIONS[i]
+            decisions += [(list(b), f) for b, f in act] if isinstance(act, list) else [(list(act), 8)]
+    for buttons, frames in decisions:
+        if not isinstance(buttons, list) or not all(isinstance(b, str) and b in BUTTONS for b in buttons):
+            raise LedgerError('route contains invalid applied buttons')
+        if type(frames) is not int or not 1 <= frames <= MAX_FRAMES:
+            raise LedgerError(f'route decisions need 1..{MAX_FRAMES} frames')
     return decisions
 
 
@@ -168,6 +190,7 @@ def cmd_oracle(a):
     import importlib
     from oracle import NesBackend, Oracle, PolicyPlayer, ReplayPlayer, serve
     os.environ['REWARD10_GAMES_ROOT'] = str(ref_dir(a))
+    publish_socket(a, ledger(a).read()['mode'])
     game = importlib.import_module(f'games.{a.slug}')
     player = None
     if a.route:

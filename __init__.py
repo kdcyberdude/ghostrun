@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 PLUGIN = 'ghostrun'
 HERE = Path(__file__).resolve().parent
@@ -15,6 +16,7 @@ CLI = HERE / 'core' / 'cli.py'
 TOOLSET = PLUGIN
 SKILLS = HERE / 'skills'
 DEFAULT_TIMEOUT = 3600
+ORACLE_START_TIMEOUT = 30
 
 SLUG = {'type': 'string', 'description': 'Short lowercase id of the game, for example thwaite.'}
 
@@ -177,35 +179,84 @@ class Plugin:
                 validate_assets(root / 'assets')
             except (OSError, ValueError, KeyError, TypeError) as e:
                 return json.dumps({'error': f'prepare assets before building: {e}'})
+            try:
+                self.oracle_hello(args['slug'], timeout=2)
+            except (OSError, RuntimeError, ValueError, KeyError) as e:
+                return json.dumps({'error': f'reference oracle is not ready: {e}. '
+                                   'Parent must call ghostrun_oracle_start and receive ready=true before dispatching the builder.'})
         self.reference_tasks.discard(task_id)
         self.builder_tasks.add(task_id)
         return json.dumps({'role': 'builder', 'workspace': str(root), 'oracle': 'use ghostrun_oracle_call'})
 
     def socket_of(self, slug):
-        info = Path(self.builder_root()) / slug / '.oracle.json'
+        info = Path(self.reference_root()) / slug / 'oracle-endpoint.json'
+        if not info.exists():
+            info = Path(self.builder_root()) / slug / '.oracle.json'
         return json.loads(info.read_text())['socket']
+
+    def oracle_hello(self, slug, timeout=1):
+        sys.path.insert(0, str(HERE / 'core'))
+        from oracle_client import OracleClient
+        client = OracleClient(self.socket_of(slug), timeout=timeout)
+        try:
+            return client.call('hello')
+        finally:
+            client.close()
 
     def oracle_start(self, args, **_):
         slug = args['slug']
-        if slug in self.oracles and self.oracles[slug].poll() is None:
-            return json.dumps({'running': True})
+        existing = self.oracles.get(slug)
+        if existing is not None and existing.poll() is not None:
+            self.oracles.pop(slug, None)
+            existing = None
+        try:
+            hello = self.oracle_hello(slug)
+            return json.dumps({'running': True, 'ready': True, 'managed': existing is not None, 'hello': hello})
+        except TimeoutError:
+            return json.dumps({'error': 'an oracle endpoint is present but unresponsive; not replacing an unowned server'})
+        except (OSError, RuntimeError, ValueError, KeyError):
+            if existing is not None and existing.poll() is None:
+                return json.dumps({'error': 'the owned oracle is alive but not responding; stop it before restarting'})
+        session = args.get('session') or 'default'
+        if Path(session).name != session or session in ('.', '..'):
+            return json.dumps({'error': 'oracle session must be a single folder name'})
+        log = Path(self.reference_root()) / slug / 'evidence' / 'oracle' / session / 'server.log'
+        log.parent.mkdir(parents=True, exist_ok=True)
         argv = [self.python(), str(CLI), '--reference-root', self.reference_root(), '--builder-root', self.builder_root(),
-                '--python', self.python(), 'oracle', slug, '--session', args.get('session') or 'default']
+                '--python', self.python(), 'oracle', slug, '--session', session]
         if args.get('route'):
             argv += ['--route', args['route']]
         if args.get('policy'):
             argv += ['--policy', args['policy']]
         env = {**clean_env(), 'PYTHONPATH': os.pathsep.join([str(Path(self.reference_root()) / slug),
                                                              str(HERE / 'engine' / 'scripts' / 'reward10')])}
-        self.oracles[slug] = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                              start_new_session=True)
-        return json.dumps({'started': True, 'pid': self.oracles[slug].pid})
+        with log.open('ab') as output:
+            proc = subprocess.Popen(argv, env=env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+        self.oracles[slug] = proc
+        deadline = time.monotonic() + ORACLE_START_TIMEOUT
+        while time.monotonic() < deadline and proc.poll() is None:
+            try:
+                hello = self.oracle_hello(slug, timeout=0.25)
+                return json.dumps({'started': True, 'ready': True, 'pid': proc.pid, 'hello': hello, 'log': str(log)})
+            except (OSError, RuntimeError, ValueError, KeyError):
+                time.sleep(0.05)
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        self.oracles.pop(slug, None)
+        return json.dumps({'error': 'reference oracle failed to become ready', 'exit_code': proc.poll(),
+                           'log': str(log), 'details': log.read_text(errors='replace')[-3000:]})
 
     def oracle_stop(self, args, **_):
         proc = self.oracles.pop(args['slug'], None)
         if proc is None:
             return json.dumps({'error': 'no oracle started by this session'})
-        proc.send_signal(signal.SIGTERM)
+        if proc.poll() is None:
+            proc.send_signal(signal.SIGTERM)
         return json.dumps({'stopped': True})
 
     def oracle_call(self, args, **_):

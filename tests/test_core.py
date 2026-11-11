@@ -256,3 +256,16 @@ def test_parallel_work_can_run_without_premature_acceptance(tmp_path):
     assert led.next_stage() == 'intake'
     with pytest.raises(LedgerError):
         led.set('explore', 'passed', 'still missing earlier verification')
+
+
+def test_recorded_policy_decisions_do_not_depend_on_search_action_set(tmp_path):
+    import cli
+    from types import SimpleNamespace
+    route = tmp_path / 'policy.json'
+    data = {'decisions': [{'buttons': ['UP'], 'frames': 1}, {'buttons': ['LEFT'], 'frames': 7}]}
+    route.write_text(json.dumps(data))
+    assert cli.route_decisions(SimpleNamespace(ACTIONS=[('RIGHT',)]), route) == [(['UP'], 1), (['LEFT'], 7)]
+    data['decisions'][0]['frames'] = 0
+    route.write_text(json.dumps(data))
+    with pytest.raises(LedgerError, match='frames'):
+        cli.route_decisions(SimpleNamespace(ACTIONS=[]), route)

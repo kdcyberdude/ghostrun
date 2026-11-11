@@ -104,3 +104,9 @@ The completion manifest must also name `visual_route`, selecting a completed cle
 Use actual route frame numbers. Native screenshots are authenticated against private oracle captures and numeric observations. Rebuild captures must come from the actual browser rendering driven by the same inputs, at native resolution without shifting, cropping or resizing to manufacture agreement. Fixed image bounds allow tiny color/edge variance but reject visibly different or blank output. These sampled checks supplement full per-frame numeric comparisons; the parent still inspects representative gameplay, animation and capture provenance.
 
 For an explicit 2D-only request, omit 3D artifact/parity/video keys from delivery and mark `visual3d` `skipped` with that delivery manifest as evidence. The plugin still checks completed 2D recreation, 2D/hash/audio parity, original/2D videos and terminal recording. Never skip 3D when it was requested. Other stages cannot be skipped.
+
+## Oracle readiness and exact policy inputs
+
+The endpoint is pinned privately when the game is initialized and mirrored into the builder's `.oracle.json`; changing TMPDIR between processes does not create a second address. `ghostrun_oracle_start` must return `ready:true` after a real hello before a builder starts. Startup failures return the private server log and its error tail. Healthy servers from another session are reused without taking ownership; the tool does not stop unowned servers.
+
+A recorded policy input route can be supplied as `{"decisions":[{"buttons":["RIGHT"],"frames":1},{"buttons":["UP"],"frames":7}]}` to `ghostrun_oracle_start`'s route argument. Apply these exact decisions to both games. This format does not translate policy outputs through a search action set. Preserve the checkpoint hash, evaluation provenance and measured boot/input alignment separately; replaying a trained policy's recorded decisions is not evidence that a search route was learned.
