@@ -20,6 +20,7 @@ Use the game path and reconstruction target supplied by the user. Initialize the
 
 ## Working rules
 - Make routine decisions yourself. Ask about cloud spending or anything that cannot be undone.
+- Do long or GPU work through GhostRun tools, not raw shell commands; tools never wait on command approval. If a command is denied, find the tool route instead of retrying it. See docs/UNATTENDED.md.
 - Use at most two subagents at once, each with independent files.
 - Time-box a hypothesis to about 30 commands. A probe with no signal is a recorded negative result.
 - Report plainly what is done, what is left and why. A passed gate means no regression, not that the rebuild is finished.

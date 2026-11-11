@@ -9,6 +9,7 @@ Questions, and where the answer lives. Docs first, then skills and code.
 | What is GhostRun, in one page? | [README](../README.md) |
 | How do the stages fit together? | [Architecture](ARCHITECTURE.md#stages) |
 | Why does it work at all? | [Architecture](ARCHITECTURE.md#why-it-works) |
+| How do I run it for hours without approval prompts? | [Unattended](UNATTENDED.md) |
 | What has actually been achieved? | [Results](RESULTS.md) |
 | What is it good for beyond rebuilding one game? | [Applications](APPLICATIONS.md) |
 | What does it do on my machine? | [Catalog disclosure](../CATALOG.md) |

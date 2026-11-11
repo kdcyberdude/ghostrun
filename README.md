@@ -111,6 +111,7 @@ Not sure where to look? Start with the [question index](docs/INDEX.md).
 - [Training: the policy, exploration and the bugs that mattered](docs/TRAINING.md)
 - [Reliability: what guarantees what, and what isn't validated](docs/RELIABILITY.md)
 - [Training watcher and self-repair](docs/TRAINING_WATCHER.md)
+- [Running unattended: approvals, subagents and long runs](docs/UNATTENDED.md)
 - [GPU environment](docs/GPU_ENGINE.md)
 - [Lessons: what to do and what not to do](docs/LESSONS.md)
 - [Results](docs/RESULTS.md)
