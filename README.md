@@ -5,7 +5,7 @@
 <!-- DEMO VIDEO: paste the link or embed here (under 90 seconds) -->
 > 🎬 **Demo video:** _coming soon_
 
-Today's models can write a one-screen game. Multi-level games fall apart, because nothing tells the model how the real thing moves, scores or ends. GhostRun gives the agent that missing reference: a player that can reach every part of the game, and a black box it can ask "if I press this, what happens next?"
+Writing a playable scene is easier than reproducing a whole game's physics, enemies and level transitions. GhostRun gives the agent a reference it can test: a trained player to explore the game, and a black box it can ask "if I press this, what happens next?"
 
 ## What it does
 
@@ -15,8 +15,8 @@ Today's models can write a one-screen game. Multi-level games fall apart, becaus
 | 🎮 | **Learn to play** | A pixel-only policy trains on thousands of NES consoles running on one GPU. |
 | 🩺 | **Self-correct** | A watcher checks training in the background. If the reward is wrong, the agent debugs it, fixes it, proves the fix and resumes. |
 | 🔒 | **Black box** | The trained player goes behind a socket. Actions in, frames out. |
-| 🏗️ | **Rebuild** | A separate builder agent, with no route to the game, recreates its mechanics from observation. |
-| ✅ | **Prove it** | Per-frame traces and a regression gate that can't be fooled by editing the evidence. |
+| 🏗️ | **Rebuild** | A separate builder agent recreates mechanics from observation, with access to the reference restricted by the plugin's isolation hook. |
+| ✅ | **Check it** | Per-frame traces and a regression gate that rejects changed reference traces or tolerances. |
 | ✨ | **Upgrade** | The result runs at any resolution, in 2D or 3D, and it's real code you can extend. |
 
 The 2D rebuild stays independently playable. An optional 2.5D or 3D version lives alongside it with separate renderer code, assets, build outputs and launch commands. Both may share gameplay simulation code; adding 3D must preserve the 2D version.
@@ -24,7 +24,7 @@ The 2D rebuild stays independently playable. An optional 2.5D or 3D version live
 ## Why it's useful
 
 - **Preserve and remaster.** Old games become readable code, checked frame by frame, that runs at 4K or in 3D.
-- **Test games automatically.** A player that reaches every level, plus a gate that fails any build that got worse.
+- **Test games automatically.** Replay a player's routes and catch regressions in the measured behaviour.
 - **Mod and remix.** Levels, difficulty and accessibility become code changes, not ROM hacks.
 - **Rebuild anything you can only observe.** The oracle pattern fits legacy UIs and firmware, not just games.
 - **Learn from it.** Reward design, CUDA emulation and recurrent PPO in one small, working codebase, with the real bugs written up.
@@ -85,6 +85,17 @@ The end-to-end check runs all 28 tools through a real Hermes install. Its docstr
 Early preview, developed from single-game research and a focused set of training and integration checks. Broad validation across a large game library is ongoing.
 
 GhostRun builds on earlier single-game player and reconstruction work. This plugin brings reward discovery, GPU training, a training watcher, a black-box oracle and trace comparison into Hermes. The current training work extends that foundation across games and genres. See [Results](docs/RESULTS.md) for the single-game results, infrastructure measurements and ongoing experiments.
+
+The 32-level Mario rebuild is the research foundation, not evidence that one unattended Hermes run completed the entire pipeline. The recorded Hermes integration test uses a generated test cartridge; a new game's end-to-end demo must be measured separately.
+
+## Code and trained players
+
+- [Training lab](https://github.com/kdcyberdude/ghostrun-lab): trainer, 12 reward readers, configs, result tables and per-level recording scripts. Its README identifies additions beyond this plugin's bundled trainer.
+- [Mario v1 player](https://huggingface.co/kdcyberdude/ghostrun-smb-policy-v1): demonstration-assisted player with a deterministic route through all 32 levels.
+- [Mario v2 player](https://huggingface.co/kdcyberdude/ghostrun-smb-policy-v2): partially trained recurrent policy with eight moods; it does not complete the game from power-on.
+- [NeSLE extensions](https://github.com/kdcyberdude/NeSLE/tree/ghostrun): the published mapper, renderer and timing changes used by the GPU environment.
+
+Model cards describe checkpoints, evaluation conditions and limitations. The repositories contain no game ROMs. See the [demo evidence guide](docs/DEMO.md) for recording and comparison requirements.
 
 ## Repository layout
 

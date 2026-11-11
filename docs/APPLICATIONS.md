@@ -1,6 +1,6 @@
 # What else this enables
 
-GhostRun produces three things that didn't exist before: a reward that explains what a game values, a player that can reach every part of it, and a rebuild that is real, readable code. Each one is useful on its own.
+GhostRun's workflow produces three reusable outputs: a reward that explains what a game values, a player with measured exploration coverage, and a rebuild in readable code. Each one is useful on its own; the player's coverage and rebuild fidelity must be checked for each game.
 
 | Use | Built on | Ready today? |
 |---|---|---|
@@ -36,13 +36,13 @@ GhostRun turns part of that work into a loop an agent can run: the oracle answer
 
 Once timing and physics are code, they're settings. A rebuild could offer slower game speed, longer jump windows, more hit points or fewer enemies, without patching a ROM.
 
-The reward reader already knows where the player is, how far through the level, and when a death is coming. That could drive narration or audio cues for blind and low-vision players. This is an idea we haven't built.
+Depending on the game, the reward reader exposes progress, health and observed death events. Combined with additional scene understanding, these signals could drive narration or audio cues for blind and low-vision players. This is an idea we haven't built; the reader does not predict an impending death.
 
 ## Level editors and mods on real code
 
 ROM hacking means editing bytes in place. A rebuild has level data as files and mechanics as functions. That makes a level editor a normal web feature, and a mod a normal pull request.
 
-The trained player is a free playtester for new levels: if it can't finish one, something is probably wrong.
+The trained player can supply repeatable playtests for new levels. Failure is a lead to investigate, not proof of a level bug: the player may not have learned the new layout.
 
 ## Speedrun and QA tooling
 
@@ -51,9 +51,9 @@ A policy that reaches every level is a tireless tester, and replay comparison is
 GhostRun already has the parts:
 
 - **Coverage.** The player plays thousands of consoles at once, from failure-weighted level starts.
-- **Regression.** `ghostrun_compare` finds the first frame where two builds differ, and `ghostrun_gate` fails a build that got worse.
+- **Regression.** `ghostrun_compare` finds the first measured divergence, and `ghostrun_gate` rejects regressions on the compared traces.
 - **Exploits.** Reward bugs found during training are often real game exploits: a counter that wraps, a pause that dodges a death.
-- **Speedruns.** Exact action logs replay frame-perfect, and the player's pad files replay in FCEUX.
+- **Speedruns.** Exact action logs support reproducible replay when the initial state and frame clock match. The lab documents the different v1 and v2 clocks; transferring a log to another emulator needs a parity check.
 
 ## Teaching RL and emulation
 

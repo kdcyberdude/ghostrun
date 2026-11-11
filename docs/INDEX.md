@@ -11,6 +11,8 @@ Questions, and where the answer lives. Docs first, then skills and code.
 | Why does it work at all? | [Architecture](ARCHITECTURE.md#why-it-works) |
 | How do I run it for hours without approval prompts? | [Unattended](UNATTENDED.md) |
 | What has actually been achieved? | [Results](RESULTS.md) |
+| Where are the published training code and model weights? | [Code and trained players](../README.md#code-and-trained-players) |
+| How should a demo be recorded and its claims checked? | [Demo evidence](DEMO.md) |
 | What is it good for beyond rebuilding one game? | [Applications](APPLICATIONS.md) |
 | What does it do on my machine? | [Catalog disclosure](../CATALOG.md) |
 | How do I run the checks? | [Contributing](../CONTRIBUTING.md#local-checks) |
