@@ -2,6 +2,12 @@
 
 The Mario rebuild and published players demonstrate the research behind GhostRun. They do not establish that the Hermes plugin rebuilt Mario in one unattended run. The plugin's recorded 28-tool integration test uses a generated cartridge. Keep these demonstrations labelled separately.
 
+## Published showcase
+
+The [70-second demo](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.2.0-demo) includes native recordings, actual Hermes builder initialization, an experimental first-level 3D preview and a same-input 2D/3D clip. Its attached provenance identifies each source and the soundtrack. [Play the public 2D game](https://kdcyberdude.github.io/ghostrun-arcade/) and see [current verification and limitations](https://github.com/kdcyberdude/ghostrun-arcade/blob/main/docs/VERIFICATION.md).
+
+The public release is 2D only. Recovered 3D code and assets are preserved on [a separate preview branch](https://github.com/kdcyberdude/ghostrun-arcade/tree/codex/recovered-3d-preview) for later work. The combined development build passed 1,131 tests and production interface checks. A 900-frame comparison preserves simulation state and 15 audio events across both renderers. A full replay of the fixed native route currently fails after reaching 1-2, so these clips are not presented as a native-equivalent 32-level browser clear.
+
 ## Capture the plugin working
 
 For a new game such as a single Pac-Man maze, save the Hermes transcript, plugin revision, commands, tool results, elapsed time and any human interventions. Record the initial workspace and final playable output. Report stages that failed or were skipped, including training, reward verification and the optional 3D upgrade. A montage of older research footage is useful context, but cannot stand in for this run.
@@ -10,7 +16,7 @@ For an under-90-second overview, use the actual successful stages: the initial r
 
 ## Reuse the recording tools
 
-The [training lab](https://github.com/kdcyberdude/ghostrun-lab#record-the-mario-players-on-all-32-levels) already provides `scripts/record_all_levels.sh`. Its dry run checks inputs and writers without loading a model. Full recording waits for the required hardware and reference environment.
+The [training lab](https://github.com/kdcyberdude/ghostrun-lab#record-the-mario-players-on-all-32-levels) already provides `scripts/record_all_levels.sh`. Its dry run checks inputs and writers without loading a model. The [existing v2 all-level recordings](https://github.com/kdcyberdude/ghostrun-lab/releases/tag/recordings-v2-20261111) are published with their action logs, all mood scores and a per-level audit (23 clears, 8 game overs, 1 capped attempt).
 
 | Player | Recording method | Important limit |
 |---|---|---|

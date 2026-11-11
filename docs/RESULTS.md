@@ -14,6 +14,14 @@ The reconstruction method was developed on a private research rebuild. Against i
 
 These measurements describe the earlier research prototype and its recorded route. The plugin packages the reward, training, oracle and comparison tools for applying the same workflow to new games.
 
+## Released Mario recordings
+
+The [v2 recording release](https://github.com/kdcyberdude/ghostrun-lab/releases/tag/recordings-v2-20261111) includes all 32 selected level-start videos, exact action bytes, eight-mood selection tables and a per-level audit. The outcomes are **23 clears, 8 game overs and 1 capped attempt**. All 32 copied controller hashes and selection rankings were checked independently.
+
+The fresh v1 capture separately visited all 32 levels in order, retaining 10,626 ticks / 79,824 legacy frame slices. Every action and duration matched its retained route. It reported terminal beside Princess before the ending text appeared; `won=false` is preserved in the [capture report](https://github.com/kdcyberdude/ghostrun-lab/blob/main/docs/V1_RECORDING.md). The [full recording archive](https://github.com/kdcyberdude/ghostrun-lab/releases/tag/recordings-v1-20261111) includes all per-level videos and original screenshots.
+
+The v2 clips are separate saved-entrance attempts, not one uninterrupted campaign. The silent NeSLE preview videos omit boot/warmup and sometimes terminal frames included in their logs; matching video frame zero to action frame zero would be incorrect. The release documents the clock and initial-state requirements for comparisons.
+
 ## Training infrastructure
 
 Local experiments on one RTX 5090 measured:

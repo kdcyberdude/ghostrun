@@ -7,13 +7,13 @@ Questions, and where the answer lives. Docs first, then skills and code.
 | Question | Answer |
 |---|---|
 | What is GhostRun, in one page? | [README](../README.md) |
-| Can I play the research rebuild? | [GhostRun Arcade](https://kdcyberdude.github.io/ghostrun-arcade/), [source and preview](https://github.com/kdcyberdude/ghostrun-arcade) |
+| Can I play the research rebuild? | [GhostRun Arcade](https://kdcyberdude.github.io/ghostrun-arcade/), [source and 70-second demo](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.2.0-demo) |
 | How do the stages fit together? | [Architecture](ARCHITECTURE.md#stages) |
 | Why does it work at all? | [Architecture](ARCHITECTURE.md#why-it-works) |
 | How do I run it for hours without approval prompts? | [Unattended](UNATTENDED.md) |
 | What has actually been achieved? | [Results](RESULTS.md) |
 | Where are the published training code and model weights? | [Code and trained players](../README.md#code-and-trained-players) |
-| How should a demo be recorded and its claims checked? | [Demo evidence](DEMO.md) |
+| How should a demo be recorded and its claims checked? | [Demo evidence](DEMO.md), [published v2 recordings](https://github.com/kdcyberdude/ghostrun-lab/releases/tag/recordings-v2-20261111) |
 | What is it good for beyond rebuilding one game? | [Applications](APPLICATIONS.md) |
 | What does it do on my machine? | [Catalog disclosure](../CATALOG.md) |
 | How do I run the checks? | [Contributing](../CONTRIBUTING.md#local-checks) |

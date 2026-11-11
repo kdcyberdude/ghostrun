@@ -3,7 +3,7 @@
 **Give Hermes a retro game. It works out how the game scores, trains a player on your GPU, then rebuilds the game in Three.js by watching that player, without ever seeing the game's code.**
 
 <!-- DEMO VIDEO: paste the link or embed here (under 90 seconds) -->
-> 🎮 **[Play the 2D research showcase](https://kdcyberdude.github.io/ghostrun-arcade/)** · [Source and 20-second gameplay preview](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.1.0-preview)
+> 🎮 **[Play the 2D research showcase](https://kdcyberdude.github.io/ghostrun-arcade/)** · [70-second demo and source](https://github.com/kdcyberdude/ghostrun-arcade/releases/tag/v0.2.0-demo)
 >
 > The short end-to-end plugin demo is still being prepared. The playable showcase is the earlier Mario research rebuild.
 
@@ -134,5 +134,3 @@ Not sure where to look? Start with the [question index](docs/INDEX.md).
 - [What this plugin does on your machine](CATALOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Publishing to GitHub and submitting the catalog PR](docs/PUBLISHING.md)
-
-<!-- MORE VIDEOS: training montage, watcher catching a bug, 2D vs 3D side by side -->
