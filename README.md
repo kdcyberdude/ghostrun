@@ -51,7 +51,7 @@ See [the full disclosure](CATALOG.md) for details.
 
 ## Install
 
-Install from [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun), or follow [Contributing](CONTRIBUTING.md#local-checks) for a local source checkout.:
+Install from [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun), or follow [Contributing](CONTRIBUTING.md#local-checks) for a local source checkout:
 
 ```bash
 hermes plugins install kdcyberdude/ghostrun
