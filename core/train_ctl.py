@@ -175,6 +175,20 @@ def launch(game, state, python, args, restart_from=None):
     return {'pid': p.pid, 'run': str(run), 'version': state['version']}
 
 
+def state_args(args):
+    """Runtime limits and reporting do not change checkpoint compatibility."""
+    runtime = {'--time-limit', '--total-iters', '--ckpt-minutes', '--ckpt-iters', '--eval-every-minutes',
+               '--eval-steps', '--eval-threads', '--log-every'}
+    result, tokens = [], iter(args)
+    for arg in tokens:
+        if arg.split('=', 1)[0] in runtime:
+            if '=' not in arg:
+                next(tokens, None)
+        else:
+            result.append(arg)
+    return result
+
+
 def start(ref, slug, python, args, share_gpu=False):
     game = Game(ref, slug)
     state = game.state
@@ -187,7 +201,7 @@ def start(ref, slug, python, args, share_gpu=False):
     if state['version'] == 0:
         state['version'] = 1
         snapshot(game, 1, {'reason': 'first reward'})
-    elif list(args) != state['args'] and state['run']:
+    elif state_args(args) != state_args(state['args']) and state['run']:
         checkpoint = Path(state['run']) / 'ckpt_rank0_latest.pt'
         if checkpoint.exists():
             model, key = best_model(state['run'])
