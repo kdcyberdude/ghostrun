@@ -11,11 +11,14 @@ import base64
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import signal
 import socket
 import subprocess
 import sys
+
+from ghostrun_security import child_env, checkpoint_path
 
 MAX_LINE = 1 << 19
 BUTTONS = ('UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT')
@@ -86,8 +89,11 @@ class ReplayPlayer:
 class PolicyPlayer:
     """A trained player process using the pixel-policy protocol (hello, reset, advance): pixels in, buttons out."""
 
-    def __init__(self, argv):
-        self.p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    def __init__(self, python, reference_root, slug, checkpoint):
+        checkpoint = checkpoint_path(reference_root, slug, checkpoint)
+        script = Path(__file__).resolve().parents[1] / 'engine' / 'rl' / 'player' / 'checkpoint.py'
+        argv = [python, str(script), '--checkpoint', str(checkpoint), '--game', slug]
+        self.p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=child_env())
         self.pending = None
         self._call(op='hello')
 
@@ -211,7 +217,11 @@ def serve(oracle, sock_path):
     path = Path(sock_path)
     path.unlink(missing_ok=True)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(str(path))
+    previous_umask = os.umask(0o177)
+    try:
+        srv.bind(str(path))
+    finally:
+        os.umask(previous_umask)
     path.chmod(0o600)
     srv.listen(1)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

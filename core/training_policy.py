@@ -1,4 +1,6 @@
 """Default to the tested recipe, disclose overrides, and measure before longer work."""
+from ghostrun_security import child_env
+
 import argparse
 import hashlib
 import json
@@ -52,7 +54,7 @@ def argv(settings):
 def hardware():
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=uuid,name,memory.total',
-                                 '--format=csv,noheader,nounits'], capture_output=True, text=True, check=True)
+                                 '--format=csv,noheader,nounits'], capture_output=True, text=True, check=True, env=child_env())
         rows = result.stdout.strip().splitlines()
         if len(rows) != 1:
             raise PolicyError('training preflight requires one visible GPU')

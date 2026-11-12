@@ -210,12 +210,12 @@ def test_watcher_keeps_starting_session_and_context(ctx, monkeypatch):
     import threading
     import types
     route = contextvars.ContextVar('watch-route', default='unbound')
-    package = types.ModuleType('hermes_cli')
+    package = types.ModuleType('gateway')
     package.__path__ = []
-    helper = types.ModuleType('hermes_cli.plugin_session')
-    helper.session_key = lambda: route.get()
-    monkeypatch.setitem(sys.modules, 'hermes_cli', package)
-    monkeypatch.setitem(sys.modules, 'hermes_cli.plugin_session', helper)
+    helper = types.ModuleType('gateway.session_context')
+    helper.get_session_env = lambda name, default: route.get() if name == "HERMES_SESSION_KEY" else default
+    monkeypatch.setitem(sys.modules, 'gateway', package)
+    monkeypatch.setitem(sys.modules, 'gateway.session_context', helper)
     plugin = load().Plugin(ctx)
     plugin.run_cli = lambda *a, **k: json.dumps({'verdict':'act', 'findings':[
         {'code':'early_learning_failure','severity':'act','evidence':'failed','next_step':'inspect'}]})

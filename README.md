@@ -52,6 +52,10 @@ A prompt can't do this. GhostRun adds things only a plugin can:
 
 See [the full disclosure](CATALOG.md) for details.
 
+By default, rebuilt games are saved in `~/ghostrun-projects/<slug>/`; set `builder_root` to choose another location.
+
+The reference player accepts an evaluation `.pt` checkpoint inside `<reference_root>/<slug>/runs/` via `ghostrun_oracle_start(checkpoint=...)`. It runs the bundled CPU player with fixed arguments and restricted checkpoint loading; arbitrary player commands are not accepted. Child runtimes receive only system and game-runtime environment variables, not provider API keys.
+
 ## Install
 
 Install from [kdcyberdude/ghostrun](https://github.com/kdcyberdude/ghostrun), or follow [Contributing](CONTRIBUTING.md#local-checks) for a local source checkout:

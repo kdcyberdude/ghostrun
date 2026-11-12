@@ -2,6 +2,8 @@
 
 This validates supplied measurements, not the honesty or exhaustiveness of an agent's claims.
 """
+from ghostrun_security import child_env
+
 import json
 import math
 from pathlib import Path
@@ -132,7 +134,7 @@ def delivery(manifest_path, contract=None, three_d=True):
     for name in (('video_original', 'video2d', 'video3d') if three_d else ('video_original', 'video2d')):
         p = path.parent / manifest[name]
         probe = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(p)],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, timeout=30, env=child_env())
         data = json.loads(probe.stdout or '{}')
         duration = float(data.get('format', {}).get('duration', 0))
         minimum = max(0, (len(expected) - 1) / 60.0988 - 0.5)

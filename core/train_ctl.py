@@ -19,6 +19,7 @@ import time
 import reward_lint
 import training_policy as policy
 import watch
+from ghostrun_security import child_env, validate_slug
 
 CORE = Path(__file__).resolve().parent
 ENGINE = CORE.parent / 'engine'
@@ -51,7 +52,7 @@ class Game:
     """Paths and state of one game on the reference side."""
 
     def __init__(self, ref, slug):
-        self.ref, self.slug = Path(ref), slug
+        self.ref, self.slug = Path(ref), validate_slug(slug)
         self.module = self.ref / 'games' / f'{slug}.py'
         self.engine = self.ref / 'engine'
         self.nesle = self.ref.parent / '_shared' / 'nesle'
@@ -70,7 +71,7 @@ class Game:
         return self.ref / 'runs' / f'v{version:03d}'
 
     def env(self):
-        inherited = {k: v for k, v in os.environ.items() if k not in ('PYTHONPATH', 'PYTHONHOME')}
+        inherited = child_env()
         return {**inherited, 'NESLE_INC': str(self.nesle / 'cpp' / 'include'),
                 'NESLE_ROM_CPP': str(self.nesle / 'cpp' / 'src' / 'rom.cpp'), 'RL_ROM_DIR': str(self.ref / 'rom'),
                 'NES_ROM_DIR': str(self.ref / 'rom'), 'PYTORCH_CUDA_ALLOC_CONF': 'expandable_segments:True'}
@@ -82,10 +83,10 @@ def setup_nesle(game):
         return 'already set up'
     game.nesle.parent.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(game.nesle, ignore_errors=True)
-    subprocess.run(['git', 'clone', '-q', NESLE_URL, str(game.nesle)], check=True)
-    subprocess.run(['git', '-C', str(game.nesle), 'checkout', '-q', NESLE_BASE], check=True)
+    subprocess.run(['git', 'clone', '-q', NESLE_URL, str(game.nesle)], check=True, env=child_env())
+    subprocess.run(['git', '-C', str(game.nesle), 'checkout', '-q', NESLE_BASE], check=True, env=child_env())
     subprocess.run(['git', '-C', str(game.nesle), 'apply', str(ENGINE / 'third_party' / 'nesle-extensions.patch')],
-                   check=True)
+                   check=True, env=child_env())
     (game.nesle / '.patched').write_text(NESLE_BASE)
     return f'NeSLE {NESLE_BASE[:8]} with extensions'
 
@@ -98,7 +99,7 @@ def build_host(game):
     out.parent.mkdir(parents=True, exist_ok=True)
     src = game.engine / 'scripts' / 'nesle_check' / 'nesle_capi.cpp'
     subprocess.run(['c++', '-O2', '-std=c++20', '-shared', '-fPIC', f"-I{game.nesle / 'cpp' / 'include'}", str(src),
-                    str(game.nesle / 'cpp' / 'src' / 'rom.cpp'), '-o', str(out)], check=True)
+                    str(game.nesle / 'cpp' / 'src' / 'rom.cpp'), '-o', str(out)], check=True, env=child_env())
 
 
 def register_game(game, boot_frames):
@@ -153,7 +154,7 @@ def gpu_other_users(own_pid=None):
     """Processes on the GPU using real memory. One owner at a time: a shared GPU slows both and confuses measurements."""
     try:
         out = subprocess.run(['nvidia-smi', '--query-compute-apps=pid,used_memory', '--format=csv,noheader,nounits'],
-                             capture_output=True, text=True, check=True).stdout
+                             capture_output=True, text=True, check=True, env=child_env()).stdout
     except (OSError, subprocess.CalledProcessError):
         return []
     rows = [line.split(', ') for line in out.strip().splitlines() if line.strip()]

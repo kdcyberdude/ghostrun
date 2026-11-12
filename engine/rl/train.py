@@ -954,7 +954,9 @@ class Trainer:
             print(f'[rl] evaluation of {self.eval_tag} still playing; it{self.it:06d} kept as model.pt only', flush=True)
             return
         self.eval_tag = f'it{self.it:06d}'
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES='')
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from ghostrun_runtime_env import child_env
+        env = dict(child_env(), CUDA_VISIBLE_DEVICES='')
         self.eval_proc = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve().parent / 'evaluate.py'), str(d / 'model.pt'), str(d),
              '--device', 'cpu', '--games', cfg.games, '--threads', str(cfg.eval_threads), '--steps', str(cfg.eval_steps),

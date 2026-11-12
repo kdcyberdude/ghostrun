@@ -206,7 +206,7 @@ class PolicySession:
                             frames_per_tick=1, frames_per_decision=FRAMES_PER_DECISION, image_size=[256, 240],
                             native_fps_fraction=[1789773, 29781], operations=list(fields), mood=self.mood,
                             moods=self.info['moods'], dropout=self.dropout_on, seed=self.seed,
-                            model=dict(iteration=self.info['iteration'], sha256=self.info['onnx_sha256']),
+                            model=dict(iteration=self.info['iteration'], sha256=self.info.get('checkpoint_sha256', self.info.get('onnx_sha256'))),
                             input='External PNG only')
             if op == 'reset':
                 decode_image(request['image_png_base64'])

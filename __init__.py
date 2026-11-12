@@ -17,6 +17,9 @@ HERE = Path(__file__).resolve().parent
 CLI = HERE / 'core' / 'cli.py'
 TOOLSET = PLUGIN
 SKILLS = HERE / 'skills'
+sys.path.insert(0, str(HERE / 'core'))
+from ghostrun_security import child_env, validate_slug, validate_session, checkpoint_path
+
 DEFAULT_TIMEOUT = 3600
 ORACLE_START_TIMEOUT = 30
 
@@ -112,12 +115,12 @@ POSITIONAL = {'set': ('stage', 'status')}
 
 def clean_env():
     """The game runtime is a different Python: Hermes's own package paths must not leak into it."""
-    return {k: v for k, v in os.environ.items() if k not in ('PYTHONPATH', 'PYTHONHOME')}
+    return child_env()
 
 
 def build_argv(command, flags, args):
     """Turn tool arguments into the CLI's argument list."""
-    argv = [command, args['slug'], *[str(args[k]) for k in POSITIONAL.get(command, ())]]
+    argv = [command, validate_slug(args['slug']), *[str(args[k]) for k in POSITIONAL.get(command, ())]]
     for key, flag in flags.items():
         value = args.get(key)
         if isinstance(value, bool):
@@ -177,7 +180,7 @@ class Plugin:
                         result['watcher'] = json.loads(self.watch_start({'slug': args['slug']}))
                         return json.dumps(result)
                 return reply
-            except (KeyError, OSError) as e:
+            except (KeyError, OSError, ValueError) as e:
                 return json.dumps({'error': str(e)})
         return handler
 
@@ -188,6 +191,10 @@ class Plugin:
         return json.dumps({'role': 'reference'})
 
     def builder_enter(self, args, task_id='', **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         if task_id in self.reference_tasks:
             return json.dumps({'error': 'start a fresh builder session: changing folders cannot erase reference context'})
         root = Path(self.builder_root()) / args['slug']
@@ -232,7 +239,18 @@ class Plugin:
             client.close()
 
     def oracle_start(self, args, **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         slug = args['slug']
+        try:
+            session = validate_session(args.get('session') or 'default')
+            if 'policy' in args:
+                raise ValueError('policy commands are not supported; provide a checkpoint path')
+            checkpoint = checkpoint_path(self.reference_root(), slug, args['checkpoint']) if args.get('checkpoint') else None
+        except (ValueError, OSError, TypeError) as e:
+            return json.dumps({'error': str(e)})
         existing = self.oracles.get(slug)
         if existing is not None and existing.poll() is not None:
             self.oracles.pop(slug, None)
@@ -245,17 +263,14 @@ class Plugin:
         except (OSError, RuntimeError, ValueError, KeyError):
             if existing is not None and existing.poll() is None:
                 return json.dumps({'error': 'the owned oracle is alive but not responding; stop it before restarting'})
-        session = args.get('session') or 'default'
-        if Path(session).name != session or session in ('.', '..'):
-            return json.dumps({'error': 'oracle session must be a single folder name'})
         log = Path(self.reference_root()) / slug / 'evidence' / 'oracle' / session / 'server.log'
         log.parent.mkdir(parents=True, exist_ok=True)
         argv = [self.python(), str(CLI), '--reference-root', self.reference_root(), '--builder-root', self.builder_root(),
                 '--python', self.python(), 'oracle', slug, '--session', session]
         if args.get('route'):
             argv += ['--route', args['route']]
-        if args.get('policy'):
-            argv += ['--policy', args['policy']]
+        if checkpoint is not None:
+            argv += ['--checkpoint', str(checkpoint)]
         env = {**clean_env(), 'PYTHONPATH': os.pathsep.join([str(Path(self.reference_root()) / slug),
                                                              str(HERE / 'engine' / 'scripts' / 'reward10')])}
         with log.open('ab') as output:
@@ -280,6 +295,10 @@ class Plugin:
                            'log': str(log), 'details': log.read_text(errors='replace')[-3000:]})
 
     def oracle_stop(self, args, **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         proc = self.oracles.pop(args['slug'], None)
         if proc is None:
             return json.dumps({'error': 'no oracle started by this session'})
@@ -288,6 +307,10 @@ class Plugin:
         return json.dumps({'stopped': True})
 
     def oracle_call(self, args, **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         sys.path.insert(0, str(HERE / 'core'))
         from oracle_client import OracleClient
         try:
@@ -309,6 +332,10 @@ class Plugin:
         return json.dumps(reply)
 
     def watch_start(self, args, **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         slug = args['slug']
         minutes = float(args['minutes']) if args.get('minutes') is not None else 1
         if not math.isfinite(minutes) or minutes <= 0:
@@ -316,8 +343,8 @@ class Plugin:
         if slug in self.watchers:
             return json.dumps({'running': True})
         try:
-            from hermes_cli.plugin_session import session_key
-            key = session_key() or None
+            from gateway.session_context import get_session_env
+            key = get_session_env('HERMES_SESSION_KEY', '') or None
         except ImportError:
             key = None
         stop = threading.Event()
@@ -328,6 +355,10 @@ class Plugin:
         return json.dumps({'watching': slug, 'every_minutes': minutes})
 
     def watch_stop(self, args, **_):
+        try:
+            validate_slug(args.get('slug'))
+        except ValueError as e:
+            return json.dumps({'error': str(e)})
         stop = self.watchers.pop(args['slug'], None)
         if stop:
             stop.set()
@@ -370,6 +401,10 @@ class Plugin:
         slug = raw_args.strip()
         if not slug:
             return 'Usage: /ghostrun <game>'
+        try:
+            validate_slug(slug)
+        except ValueError as e:
+            return str(e)
         state = json.loads(self.run_cli(['status', slug], timeout=30))
         if 'error' in state:
             return state['error']
@@ -403,7 +438,7 @@ def register(ctx):
         'ghostrun_oracle_start': (plugin.oracle_start, 'Start the black-box oracle for a game.',
                                   dict(slug=SLUG, session=text('Session name.', default=None),
                                        route=text('A search result to replay.', default=None),
-                                       policy=text('Command of a trained player.', default=None))),
+                                       checkpoint=text('Evaluation .pt checkpoint inside this game\'s reference runs folder.', default=None))),
         'ghostrun_oracle_stop': (plugin.oracle_stop, 'Stop the oracle.', dict(slug=SLUG)),
         'ghostrun_oracle_call': (plugin.oracle_call, 'Send one request to the oracle: actions in, frames and declared numbers out.',
                                  dict(slug=SLUG, op=text('hello, reset, step, observe, checkpoint, restore or play.'),

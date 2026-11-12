@@ -1,5 +1,5 @@
 name: ghostrun
-version: 0.3.0
+version: 0.3.1
 manifest_version: 2
 description: Recreate NES games as browser games you can play and change. Use it to learn how a game works, rebuild its levels and mechanics, or give a recreation a 3D look. GhostRun helps the agent play, build, compare and improve.
 kind: standalone

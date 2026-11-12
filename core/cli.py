@@ -31,14 +31,15 @@ from prepared_assets import validate_assets  # noqa: E402
 import isolation  # noqa: E402
 from ledger import Ledger, LedgerError, check_rights  # noqa: E402
 import train_ctl  # noqa: E402
+from ghostrun_security import child_env, validate_slug, validate_session, checkpoint_path
 
 
 def ref_dir(a):
-    return Path(a.reference_root).expanduser() / a.slug
+    return Path(a.reference_root).expanduser() / validate_slug(a.slug)
 
 
 def builder_dir(a):
-    return Path(a.builder_root).expanduser() / a.slug
+    return Path(a.builder_root).expanduser() / validate_slug(a.slug)
 
 
 def ledger(a):
@@ -178,7 +179,7 @@ def cmd_policy_readiness(a):
 
 
 def reward_env(a):
-    return {**os.environ, 'REWARD10_GAMES_ROOT': str(ref_dir(a)),
+    return {**child_env(), 'REWARD10_GAMES_ROOT': str(ref_dir(a)),
             'PYTHONPATH': os.pathsep.join([str(ref_dir(a)), str(REWARD10)])}
 
 
@@ -228,6 +229,8 @@ def route_decisions(game, result_path):
 
 def cmd_oracle(a):
     """Runs in the foreground until stopped. It needs the emulator runtime, so start it with that Python."""
+    validate_session(a.session)
+    checkpoint = checkpoint_path(a.reference_root, a.slug, a.checkpoint) if a.checkpoint else None
     import importlib
     from oracle import NesBackend, Oracle, PolicyPlayer, ReplayPlayer, serve
     os.environ['REWARD10_GAMES_ROOT'] = str(ref_dir(a))
@@ -236,8 +239,8 @@ def cmd_oracle(a):
     player = None
     if a.route:
         player = ReplayPlayer(route_decisions(game, a.route))
-    elif a.policy:
-        player = PolicyPlayer(a.policy.split())
+    elif checkpoint is not None:
+        player = PolicyPlayer(a.python, a.reference_root, a.slug, checkpoint)
     backend = NesBackend(game)
     backend.reset()
     serve(Oracle(backend, ref_dir(a) / 'evidence' / 'oracle' / a.session, player), socket_path(a))
@@ -290,8 +293,7 @@ def cmd_balance(a):
 
 def progress_unit(a):
     """Read the game's PROGRESS_UNIT in the reward runtime, which holds the imports the module needs."""
-    code = f"import importlib;print(importlib.import_module('games.{a.slug}').PROGRESS_UNIT)"
-    p = subprocess.run([a.python, '-c', code], env=reward_env(a), cwd=ref_dir(a), capture_output=True, text=True)
+    p = subprocess.run([a.python, str(CORE / 'progress_unit.py'), validate_slug(a.slug)], env=reward_env(a), cwd=ref_dir(a), capture_output=True, text=True)
     if p.returncode:
         raise LedgerError(f'cannot load the game module: {p.stderr[-800:]}')
     return float(p.stdout)
@@ -415,7 +417,7 @@ def parser():
     add('fix-validate', cmd_fix_validate)
     add('fix-apply', cmd_fix_apply)
     add('fix-review', cmd_fix_review)
-    add('oracle', cmd_oracle, ('--session', dict(default='default')), ('--route', {}), ('--policy', {}))
+    add('oracle', cmd_oracle, ('--session', dict(default='default')), ('--route', {}), ('--checkpoint', {}))
     add('isolation', cmd_isolation)
     add('import-assets', cmd_import_assets, ('--source', dict(required=True)))
     trace = (('--reference', dict(required=True)), ('--rebuild', dict(required=True)), ('--tolerances', dict(required=True)))
@@ -427,6 +429,7 @@ def parser():
 def main():
     a = parser().parse_args()
     try:
+        validate_slug(a.slug)
         result = a.fn(a)
     except (ValueError, train_ctl.TrainError, OSError, KeyError, TypeError) as e:
         print(json.dumps({'error': str(e)}))
